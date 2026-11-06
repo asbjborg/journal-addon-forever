@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.6.32] - 2026-11-06
+
+Forever-only port of 0.6.31. Schema stays 3, so existing journals are not wiped.
+
+### Changed
+
+- TOC interface is 16001, with a matching `JournalingAddon_Camelot.toc`
+- Party roster listens for `GROUP_ROSTER_UPDATE` and counts with `GetNumSubgroupMembers`
+- Quest accept uses the quest id with `C_QuestLog.GetTitleForQuestID`
+- Hearth detection reads `C_Spell.GetSpellInfo` tables and spell ids 8690 and 556
+- Character and party names keep hyphens and a surname returned by `UnitName`
+- Combat log reads are guarded. Kill names still come from the XP chat line when the log does not supply one
+- `TakeTaxiNode` is hooked only when the function exists
+- Story-writer no longer requests the Burning Crusade Wowhead quest catalog
+- `deploy.sh` refuses to copy files
+
 ## [0.6.31] - 2026-02-08
 
 ### Added

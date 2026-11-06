@@ -1,6 +1,6 @@
 # Journal addon
 
-A World of Warcraft addon for creating a personal journal of your adventures. Automatically tracks quests, kills, loot, XP gains, travel, and more, while also allowing manual entries for screenshots, target captures, and notes.
+A World of Warcraft Forever addon for a personal journal of your adventures. It tracks quests, kills, loot, XP, travel, and the rest of the session, and it still takes manual notes, target captures, and scene captures. Forever install, live checks, and the story pilot are in [docs/FOREVER.md](docs/FOREVER.md).
 
 ## Features
 
@@ -26,18 +26,15 @@ A World of Warcraft addon for creating a personal journal of your adventures. Au
 
 ## Requirements
 
-- World of Warcraft: The Burning Crusade Classic (2.5.5)
-- Interface version: 20505
+- World of Warcraft: Forever (1.60.x)
+- Interface version: 16001
+- This port does not target The Burning Crusade Classic
 
 ## Installation
 
-1. Download or clone this repository
-2. Copy the `JournalingAddon` folder to your WoW AddOns directory:
-   - Windows: `World of Warcraft\_classic_\Interface\AddOns\`
-   - macOS: `World of Warcraft/_classic_/Interface/AddOns/`
-   - Linux: `World of Warcraft/_classic_/Interface/AddOns/`
-3. Restart WoW or use `/reload` in-game
-4. The addon should appear in your AddOns list
+Copy `JournalingAddon` into the Forever client's `Interface/AddOns` folder yourself. Do not use `rsync --delete`, and do not run `deploy.sh` (it exits without copying). SavedVariables are left alone. The schema stays at v3, so loading this version does not wipe an existing `JournalDB`.
+
+Paths differ by install. This repository has not been checked against a live client. Look for the AddOns directory next to the Forever executable. Two locations that show up in public write-ups, and that still need a look on your machine, are a `_forever_` folder and a `_classic_beta_` folder. Details, the smoke checklist, and what is still unverified: [docs/FOREVER.md](docs/FOREVER.md).
 
 ## Usage
 
@@ -56,6 +53,7 @@ A World of Warcraft addon for creating a personal journal of your adventures. Au
 - `/journal reset` - End current session and start a fresh one
 - `/journal wipe` - Wipe all journal data and start fresh
 - `/journal help` - Show all available commands
+- `/journal compat` - Print schema, session count, character key, and client build
 - `/journal debug` - Toggle debug logging
 
 ### Entry Types
@@ -81,7 +79,7 @@ Manual entries:
 
 ## Data Storage
 
-Journal data is stored in `SavedVariables/JournalDB.lua` in your WTF folder. This persists across game sessions and characters.
+Journal data is stored in `SavedVariables/JournalDB.lua` in your WTF folder. This persists across game sessions and characters. Schema version stays 3. A character key is the given name, a space, and the surname when `UnitName` returns one, then a hyphen and the realm from `GetRealmName`. Hyphens inside a name are kept.
 
 ## Development
 
@@ -98,14 +96,15 @@ See `ARCHITECTURE.md` for the module layout and event flow.
 
 ### Automation and workflows
 
-Session JSONL can be enriched and processed with the **story-writer** workflow runner (no n8n). See [story-writer/](story-writer/) for step templates and the story-beat-writer workflow (read session → collect quest IDs → fetch Wowhead → enrich quest events → output JSONL).
+Session JSONL can be processed with the **story-writer** workflow runner (no n8n, no AI API). See [story-writer/](story-writer/). The quest step refuses the Burning Crusade Wowhead catalog so Forever quest ids are not filled with the wrong text. A one-session path from `/journal note` to a draft that stays tied to `msg` is in [docs/FOREVER.md](docs/FOREVER.md).
 
 ### Deployment
-A `deploy.sh` script is included for macOS to sync the addon to the WoW AddOns directory. Modify the path in the script to match your installation.
+
+`deploy.sh` does not copy files. Install by the manual steps in [docs/FOREVER.md](docs/FOREVER.md).
 
 ## License
 
-This project is licensed under a Non-Commercial License. See [LICENSE](LICENSE) for details.
+The addon stays under the original non-commercial license. Copyright (c) 2026 asbjborg. Stories, videos, and other creative works made from journal data may be published and monetized by their creators. This is not an OSI-approved open source license. See [LICENSE](LICENSE).
 
 ## Contributing
 

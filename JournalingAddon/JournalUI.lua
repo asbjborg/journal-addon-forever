@@ -425,7 +425,10 @@ end
 SLASH_JOURNAL1 = "/journal"
 SlashCmdList["JOURNAL"] = function(msg)
   local arg = strlower((string.gsub(msg or "", "^%s*(.-)%s*$", "%1")))
-  if arg == "debug" then
+  if arg == "compat" then
+    Journal:ReportCompat()
+    return
+  elseif arg == "debug" then
     Journal.debug = not Journal.debug
     local state = Journal.debug and "on" or "off"
     if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
@@ -512,6 +515,7 @@ SlashCmdList["JOURNAL"] = function(msg)
       DEFAULT_CHAT_FRAME:AddMessage("  /journal undo - Remove last entry")
       DEFAULT_CHAT_FRAME:AddMessage("  /journal clear - Clear current session")
       DEFAULT_CHAT_FRAME:AddMessage("  /journal reset - Start new session")
+      DEFAULT_CHAT_FRAME:AddMessage("  /journal compat - Print Forever client checks")
       DEFAULT_CHAT_FRAME:AddMessage("  /journal debug - Toggle debug mode")
       DEFAULT_CHAT_FRAME:AddMessage("  /journal wipe - Wipe all journal data")
     end

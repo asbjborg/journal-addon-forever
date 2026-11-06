@@ -13,18 +13,20 @@ local function cleanMsg(msg)
   return msg:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
 end
 
--- Get current party size and member names (TBC: GetNumPartyMembers, party1..party4)
+-- Party size excludes the player. Forever uses GetNumSubgroupMembers, then party1..partyN.
 local function getPartyRoster()
   local n = 0
-  if GetNumPartyMembers then
-    n = GetNumPartyMembers()
+  if type(GetNumSubgroupMembers) == "function" then
+    n = GetNumSubgroupMembers()
+    Journal.partyRosterStatus = "GetNumSubgroupMembers"
+  else
+    Journal.partyRosterStatus = "GetNumSubgroupMembers missing"
   end
   local names = {}
   for i = 1, n do
-    local name = UnitName("party" .. i)
-    if name and name ~= "" then
-      -- Strip realm suffix for consistency
-      name = name:match("([^%-]+)") or name
+    local given, surname = UnitName("party" .. i)
+    local name = Journal.Forever.displayName(given, surname, nil)
+    if name then
       table.insert(names, name)
     end
   end
@@ -90,10 +92,10 @@ local function handleRosterUpdate()
   lastPartyNames = currentNames
 end
 
--- PARTY_INVITE_REQUEST: we were invited (arg1 = inviter name in TBC)
+-- PARTY_INVITE_REQUEST: inviter name. Hyphens are part of the name on Forever.
 Journal.On("PARTY_INVITE_REQUEST", function(inviterName)
   if inviterName and inviterName ~= "" then
-    local name = inviterName:match("([^%-]+)") or inviterName
+    local name = Journal.Forever.normalizePersonName(inviterName)
     pendingInviteFrom = name
     Journal:AddEvent("party", {
       action = "invited",
@@ -102,8 +104,7 @@ Journal.On("PARTY_INVITE_REQUEST", function(inviterName)
   end
 end)
 
--- Roster changed (TBC anniversary 20505)
-Journal.On("PARTY_MEMBERS_CHANGED", handleRosterUpdate)
+Journal.On("GROUP_ROSTER_UPDATE", handleRosterUpdate)
 
 -- CHAT_MSG_SYSTEM: "You have invited X", "You leave the group.", "You have been removed.", "X has joined.", "X has left."
 -- Use WoW global format strings when available for localization; fallback to English patterns.
@@ -114,7 +115,7 @@ Journal.On("CHAT_MSG_SYSTEM", function(msg)
   -- "You have invited [name] to join your group." (localization: add global string pattern if needed)
   local invited = cleaned:match("^You have invited (.+) to join your group%.?$")
   if invited and invited ~= "" then
-    local name = invited:match("([^%-]+)") or invited
+    local name = Journal.Forever.normalizePersonName(invited)
     Journal:AddEvent("party", {
       action = "invited",
       name = name,
@@ -150,7 +151,7 @@ Journal.On("CHAT_MSG_SYSTEM", function(msg)
   -- Set lastRemovedMember so roster update doesn't also log "member_left" for same person
   local removedMember = cleaned:match("^You have removed (.+) from the group%.?$")
   if removedMember and removedMember ~= "" then
-    local name = removedMember:match("([^%-]+)") or removedMember
+    local name = Journal.Forever.normalizePersonName(removedMember)
     lastRemovedMember = name
     Journal:AddEvent("party", {
       action = "removed_member",
@@ -159,7 +160,7 @@ Journal.On("CHAT_MSG_SYSTEM", function(msg)
     return
   end
 
-  -- member_joined / member_left are handled by roster update (PARTY_MEMBERS_CHANGED / GROUP_ROSTER_UPDATE)
+  -- member_joined / member_left are handled by GROUP_ROSTER_UPDATE
   -- to avoid duplicate entries; no need to parse "X has joined" / "X has left" here
 end)
 

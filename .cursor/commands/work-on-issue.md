@@ -17,7 +17,7 @@ Use the github MCP tool to read the issue mentioned by the user and work on the 
 
 3. **Implement** - Make code changes for ONE issue at a time (see `.cursor/rules/workflow.mdc` for full workflow)
 
-4. **Deploy** - Run `deploy.sh` to deploy changes for testing (see `.cursor/rules/workflow.mdc` for details)
+4. **Install** - Do not run `deploy.sh`. Follow `docs/FOREVER.md` when a person is smoke-testing on WoW Forever.
 
 5. **Test** - Wait for user to test before proceeding
 

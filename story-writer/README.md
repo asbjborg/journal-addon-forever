@@ -21,15 +21,19 @@ Or:
 node workflows/story-beat-writer/index.js
 ```
 
-Default config uses `workflows/story-beat-writer/examples` (Thunderstrike/Maskine/session-01). Override via env or a **.env** file.
+Default config uses `workflows/story-beat-writer/examples` (`ExampleRealm/ExampleHero/session-01`). That file is a made-up session, not a play log. Override via env or a **.env** file.
 
 **Env file:** Put a `.env` in `workflows/story-beat-writer/` (or in the directory you run from). Copy from `.env.example` and edit. Variables:
 
 - `PATH_TO_SESSIONS` – base path to session folders (realm/character/session-N/session-N.jsonl)
 - `REALM`, `CHARACTER_NAME`, `SESSION`
 
-Pipeline: read session JSONL → parse events → collect quest IDs → fetch Wowhead HTML per quest → **enrich** each quest event with Wowhead data → output **JSONL** (one line per event). Quest events get `data.questContext` with the parsed Wowhead object (title, description, rewards, NPCs, etc.) or `{ questID, error }` if fetch/parse failed. Non-quest lines are unchanged.
+Pipeline: read session JSONL → parse events → collect quest IDs → quest catalog step → **enrich** each quest event → output **JSONL** (one line per event). Non-quest lines are unchanged.
 
-To save enriched output: `npm run story-beat-writer > session-01-enriched.jsonl`
+The catalog step does not call `https://www.wowhead.com/tbc/quest=`. That URL is the Burning Crusade catalog and would attach the wrong quest text to Forever ids. With `WOWHEAD_QUEST_BASE_URL` unset, each quest gets `data.questContext = { questID, error, catalog: "missing-forever-catalog" }`. The recorded `msg` and `data.title` stay as exported. This repo does not add a Forever Wowhead catalog and does not call an AI API.
 
-**Note:** Live Wowhead may redirect or return non-HTML; for reliable parsing use cached HTML or run against examples in `workflows/story-beat-writer/examples/wowhead/`.
+To save that output: `npm run story-beat-writer > session-01-enriched.jsonl`
+
+Static check: `npm test`.
+
+The HTML files under `examples/wowhead/` are cached Burning Crusade pages kept so the parser can be read. They are not a source of Forever quest text.

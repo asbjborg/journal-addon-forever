@@ -3,9 +3,15 @@ Journal = Journal or _G.Journal or {}
 
 local QUEST_REWARD_BUFFER_WINDOW = 2  -- Buffer events within 2 seconds of quest turn-in
 
-function Journal:LogQuestAccepted(questLogIndex, questID)
-  local title, _, _, _, _, _, _, derivedQuestID = GetQuestLogTitle(questLogIndex)
-  questID = questID or derivedQuestID
+function Journal:LogQuestAccepted(questID)
+  questID = Journal.Forever.questAcceptId(questID)
+  local title = nil
+  if questID and C_QuestLog and type(C_QuestLog.GetTitleForQuestID) == "function" then
+    local ok, result = pcall(C_QuestLog.GetTitleForQuestID, questID)
+    if ok and type(result) == "string" and result ~= "" then
+      title = result
+    end
+  end
   if not title or title == "" then
     title = questID and ("Quest " .. questID) or "Quest"
   end
@@ -110,9 +116,9 @@ Journal:RegisterRenderer("quest", function(data)
   return "Quest: " .. (data.title or "Unknown") .. suffix
 end)
 
-Journal.On("QUEST_ACCEPTED", function(questLogIndex, questID)
-  if questLogIndex then
-    Journal:LogQuestAccepted(questLogIndex, questID)
+Journal.On("QUEST_ACCEPTED", function(questID)
+  if Journal.Forever.questAcceptId(questID) then
+    Journal:LogQuestAccepted(questID)
   end
   -- Activity chunk is flushed automatically by hard cut detection in AddEvent()
 end)

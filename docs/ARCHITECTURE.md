@@ -1,7 +1,9 @@
 # JournalingAddon Architecture
 
 This addon uses a simple module split with toc load order. New features are added
-as new Lua files and listed in `JournalingAddon.toc`.
+as new Lua files and listed in both `JournalingAddon.toc` and `JournalingAddon_Camelot.toc`.
+
+Forever client notes, the install copy, and the live checklist are in `docs/FOREVER.md`.
 
 ## Layout
 
@@ -32,16 +34,11 @@ UI (loaded last):
 - `msg` is derived by a renderer and cached on the event.
 - UI should use `msg` and not attempt to rebuild it.
 
-## Alpha Schema Reset Policy
+## Schema policy
 
-Before v1.0.0, schema changes reset all journal data.
+`Journal.CURRENT_SCHEMA` stays at 3. Loading the addon does not wipe sessions when `JournalDB.schemaVersion` differs. `/journal wipe` is still an explicit delete.
 
-On addon load:
-- If `JournalDB.schemaVersion ~= Journal.CURRENT_SCHEMA`, the addon resets storage.
-- In debug mode, old data is moved to `JournalDB.backup_<timestamp>`.
-- A fresh session is started.
-
-No per-entry migrations are used during alpha.
+No per-entry migration runs. A saved v3 session is read as v3.
 
 ## Exported data and automation
 

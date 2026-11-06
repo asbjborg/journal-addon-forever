@@ -205,6 +205,20 @@ function Journal:RecordKill(destName)
   counts[destName] = (counts[destName] or 0) + 1
 end
 
+function Journal:RecordSourcedKill(source, destName)
+  if type(destName) ~= "string" or destName == "" then
+    return
+  end
+  local now = GetTime()
+  self.killSourceNote = self.killSourceNote or {}
+  local previous = self.killSourceNote[destName]
+  if not Journal.Forever.shouldCountKill(previous, source, now, 1.5) then
+    return
+  end
+  self.killSourceNote[destName] = { source = source, at = now }
+  self:RecordKill(destName)
+end
+
 function Journal:RecordCombatXP(msg)
   if not msg or msg == "" then
     return
@@ -235,6 +249,11 @@ function Journal:RecordCombatXP(msg)
       table.remove(self.recentKillXP, 1)
     end
     
+    local killName = Journal.Forever.killNameFromXpMessage(msg)
+    if killName then
+      self:RecordSourcedKill("chat", killName)
+    end
+
     -- Add kill XP directly to activity chunk
     self:EnsureActivityChunk()
     self.activityChunk.xp = (self.activityChunk.xp or 0) + xpAmount
@@ -393,19 +412,8 @@ local function escapePattern(s)
   return "^" .. s .. "$"
 end
 
--- Normalize player name (strip realm suffix, raid icons, color codes, and whitespace)
 local function normalizeName(name)
-  if not name then return nil end
-  -- Trim whitespace
-  name = name:gsub("^%s+", ""):gsub("%s+$", "")
-  -- Strip color codes (|c[0-9A-Fa-f]{8} and |r)
-  name = name:gsub("|c[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]", "")
-  name = name:gsub("|r", "")
-  -- Strip raid target icons ({rt1} through {rt8})
-  name = name:gsub("{rt%d}", "")
-  -- Strip realm suffix (-RealmName)
-  name = name:match("([^%-]+)") or name
-  return name
+  return Journal.Forever.normalizePersonName(name)
 end
 
 -- Cache for built loot patterns
@@ -452,7 +460,8 @@ local function parseLootChatMessage(msg)
   end
 
   local patterns = buildLootPatterns()
-  local myName = normalizeName(UnitName("player"))
+  local given, surname = UnitName("player")
+  local myName = normalizeName(Journal.Forever.displayName(given, surname, GetRealmName()))
 
   -- Extract itemLink first (works for all loot messages)
   -- Item links are always present in loot messages and are more reliable than text matching
@@ -762,7 +771,9 @@ function Journal:PruneDamage(now)
 end
 
 function Journal:GetSourceLevel(sourceName)
-  if UnitExists("target") and UnitName("target") == sourceName then
+  local given, surname = UnitName("target")
+  local targetName = Journal.Forever.displayName(given, surname, nil)
+  if UnitExists("target") and targetName == sourceName then
     local level = UnitLevel("target")
     if level and level > 0 then
       return level
@@ -788,22 +799,62 @@ function Journal:RecordDeath()
   self.agg.damage.events = {}
 end
 
+local function plainValue(value)
+  if type(issecretvalue) == "function" and issecretvalue(value) then
+    return nil
+  end
+  return value
+end
+
 function Journal:OnCombatLog()
-  local timestamp, subevent, _, _, srcName, _, _, destGUID, destName, destFlags, _, _, spellName, _, amount =
-    CombatLogGetCurrentEventInfo()
+  local getter = rawget(_G, "CombatLogGetCurrentEventInfo")
+  if type(getter) ~= "function" then
+    self.combatLogState = "getter-missing"
+    return
+  end
+
+  local ok, timestamp, subevent, _, _, srcName, _, _, destGUID, destName, destFlags, _, _, spellName, _, amount =
+    pcall(getter)
+  if not ok then
+    self.combatLogState = "getter-error"
+    return
+  end
+
+  timestamp = plainValue(timestamp)
+  subevent = plainValue(subevent)
+  srcName = plainValue(srcName)
+  destGUID = plainValue(destGUID)
+  destName = plainValue(destName)
+  destFlags = plainValue(destFlags)
+  spellName = plainValue(spellName)
+  amount = plainValue(amount)
+
+  if type(subevent) ~= "string" then
+    self.combatLogState = "unreadable"
+    return
+  end
+  self.combatLogState = "readable"
 
   if subevent == "PARTY_KILL" then
-    if destFlags and bit.band(destFlags, COMBATLOG_OBJECT_TYPE_NPC) > 0 then
-      self:RecordKill(destName)
+    local isNpc = true
+    if type(destFlags) == "number" and type(bit) == "table" and type(bit.band) == "function" and type(COMBATLOG_OBJECT_TYPE_NPC) == "number" then
+      isNpc = bit.band(destFlags, COMBATLOG_OBJECT_TYPE_NPC) > 0
+    end
+    if isNpc and type(destName) == "string" then
+      self:RecordSourcedKill("combatlog", destName)
     end
     return
   end
 
-  if destGUID == UnitGUID("player") then
+  if type(destGUID) == "string" and destGUID == UnitGUID("player") then
     if subevent == "SWING_DAMAGE" then
-      self:RecordDamage(timestamp, srcName, "Melee", amount)
+      if type(srcName) == "string" and type(amount) == "number" then
+        self:RecordDamage(timestamp, srcName, "Melee", amount)
+      end
     elseif subevent == "SPELL_DAMAGE" or subevent == "SPELL_PERIODIC_DAMAGE" or subevent == "RANGE_DAMAGE" then
-      self:RecordDamage(timestamp, srcName, spellName, amount)
+      if type(srcName) == "string" and type(spellName) == "string" and type(amount) == "number" then
+        self:RecordDamage(timestamp, srcName, spellName, amount)
+      end
     end
   end
 end

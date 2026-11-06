@@ -14,7 +14,7 @@ assignees: ''
 
 ## Implementation Notes
 <!-- Any technical details, API considerations, or implementation hints -->
-<!-- For WoW TBC Classic (2.5.5), Interface version 20505 -->
+<!-- For WoW Forever (1.60.x), Interface version 16001 -->
 
 ## Additional Context
 <!-- Add any other context, screenshots, or examples about the feature request here -->

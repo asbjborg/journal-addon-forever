@@ -1,11 +1,14 @@
-## Interface: 20505
+## Interface: 16001
+## Interface-Camelot: 16001
 ## Title: JournalingAddon
-## Notes: Session-based journal log.
+## Notes: Session-based journal log for WoW Forever.
 ## Author: asbjborg
-## Version: 0.6.31
+## Version: 0.6.32
 ## SavedVariables: JournalDB
+## X-Game: forever
 
 core/Namespace.lua
+core/Forever.lua
 core/Util.lua
 core/Storage.lua
 core/Renderers.lua

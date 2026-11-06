@@ -7,8 +7,8 @@ const path = require('path');
  */
 const defaultConfig = {
   path_to_sessions: path.join(__dirname, 'examples'),
-  realm: 'Thunderstrike',
-  character_name: 'Maskine',
+  realm: 'ExampleRealm',
+  character_name: 'ExampleHero',
   session: '01',
 };
 

@@ -33,11 +33,61 @@ local events = {
   "CHAT_MSG_COMBAT_FACTION_CHANGE",
   "CHAT_MSG_SKILL",
   "CHAT_MSG_COMBAT_XP_GAIN",
-  -- Party (TBC anniversary 20505 only; do not add GROUP_ROSTER_UPDATE or other-client events)
+  -- Forever roster event. PARTY_MEMBERS_CHANGED is not registered: an unknown event throws.
   "PARTY_INVITE_REQUEST",
-  "PARTY_MEMBERS_CHANGED",
+  "GROUP_ROSTER_UPDATE",
 }
 
+Journal.eventRegistration = {}
 for _, eventName in ipairs(events) do
-  frame:RegisterEvent(eventName)
+  local ok, err = pcall(frame.RegisterEvent, frame, eventName)
+  if ok then
+    Journal.eventRegistration[eventName] = "registered"
+  else
+    Journal.eventRegistration[eventName] = tostring(err)
+  end
+end
+
+function Journal:ReportCompat()
+  local function say(text)
+    if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
+      DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Journal:|r " .. text)
+    end
+  end
+
+  say("schema " .. tostring(Journal.CURRENT_SCHEMA))
+  local sessions = self.db and self.db.sessions
+  local sessionCount = 0
+  if type(sessions) == "table" then
+    sessionCount = #sessions
+  end
+  say("sessions " .. tostring(sessionCount))
+  say("character " .. tostring(self:GetCharacterKey()))
+  say("combatLog " .. tostring(self.combatLogState or "unseen"))
+  say("taxiHook " .. tostring(self.taxiHookStatus or "unset"))
+  say("partyRoster " .. tostring(self.partyRosterStatus or "unset"))
+
+  local version, build, _, tocVersion = "unknown", "unknown", nil, "unknown"
+  if type(GetBuildInfo) == "function" then
+    version, build, _, tocVersion = GetBuildInfo()
+  end
+  say("client " .. tostring(version) .. " build " .. tostring(build) .. " interface " .. tostring(tocVersion))
+  say("projectId " .. tostring(WOW_PROJECT_ID))
+  if WOW_PROJECT_CAMELOT ~= nil then
+    say("projectCamelot " .. tostring(WOW_PROJECT_CAMELOT))
+  end
+
+  if self.eventRegistration then
+    local names = {}
+    for eventName in pairs(self.eventRegistration) do
+      table.insert(names, eventName)
+    end
+    table.sort(names)
+    for _, eventName in ipairs(names) do
+      local status = self.eventRegistration[eventName]
+      if status ~= "registered" then
+        say("event " .. eventName .. " FAILED " .. status)
+      end
+    end
+  end
 end
