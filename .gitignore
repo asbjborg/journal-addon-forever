@@ -1,0 +1,26 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+*.swp
+*.swo
+*~
+
+# WoW addon files (deployed)
+# Note: We keep source files, but ignore any deployed copies if they exist
+
+# Logs
+*.log
+
+# projectmanagement docs
+Chad/
+
+# sessions
+sessions/*
+!sessions/.gitignore
+
+# story-writer env (local config)
+story-writer/workflows/story-beat-writer/.env
+.env

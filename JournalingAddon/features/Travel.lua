@@ -1,0 +1,573 @@
+local _, Journal = ...
+Journal = Journal or _G.Journal or {}
+
+function Journal:GetPlayerCoords()
+  -- Try multiple methods to get coordinates
+  -- Method 1: GetPlayerMapPosition (world map fractions 0.0-1.0)
+  if GetPlayerMapPosition then
+    local x, y = GetPlayerMapPosition("player")
+    if x and y and x > 0 and y > 0 then
+      -- Convert to zone coordinates (0-100) if that's what the map shows
+      -- If map shows 37.2, and we get 0.372, multiply by 100
+      return math.floor(x * 1000 + 0.5) / 10, math.floor(y * 1000 + 0.5) / 10
+    end
+  end
+  
+  -- Method 2: Try C_Map API (if available in TBC Classic)
+  if C_Map and C_Map.GetPlayerMapPosition then
+    local mapID = C_Map.GetBestMapForUnit("player")
+    if mapID then
+      local pos = C_Map.GetPlayerMapPosition(mapID, "player")
+      if pos and pos.x and pos.y and pos.x > 0 and pos.y > 0 then
+        return math.floor(pos.x * 1000 + 0.5) / 10, math.floor(pos.y * 1000 + 0.5) / 10
+      end
+    end
+  end
+  
+  return nil, nil
+end
+
+function Journal:HandleFlightStart()
+  if self.flightState.onTaxi then
+    return
+  end
+  
+  -- Flush activity chunk before starting flight (hard cut event)
+  if self.FlushActivityChunk then
+    self:FlushActivityChunk()
+  end
+  
+  self.flightState.onTaxi = true
+  if not self.flightState.originZone then
+    self.flightState.originZone = GetRealZoneText()
+  end
+  self.flightState.startedAt = time()
+  local dest = self.flightState.destinationName
+  local origin = self.flightState.originName or self.flightState.originZone
+  
+  -- Check for duplicate entries within 30 seconds (deduplication)
+  -- Look at last 50 entries for identical flight_start entries
+  if self.currentSession and self.currentSession.entries then
+    for i = #self.currentSession.entries, math.max(1, #self.currentSession.entries - 50), -1 do
+      local entry = self.currentSession.entries[i]
+      if entry.type == "travel" and entry.data and entry.data.action == "flight_start" then
+        -- Check if entries are identical (same origin, destination)
+        local entryOrigin = entry.data.origin
+        local entryDest = entry.data.destination
+        if entryOrigin == origin and entryDest == dest then
+          -- Check if within 30 seconds by comparing timestamps (simple string comparison works for recent entries)
+          -- ISO timestamps are sortable, so if they're close in the array and have same hour/minute, likely within 30s
+          -- For safety, we check last 50 entries which should cover ~30 seconds of normal gameplay
+          -- Remove the first (older) duplicate entry
+          table.remove(self.currentSession.entries, i)
+          self:DebugLog("Removed duplicate flight_start entry (deduplication)")
+          break
+        end
+      end
+    end
+  end
+  
+  local eventData = {
+    action = "flight_start",
+    origin = origin,
+    destination = dest,
+    hops = self.flightState.hops,
+  }
+  
+  -- Store entry index for verification
+  local entryIndex = nil
+  if self.currentSession and self.currentSession.entries then
+    entryIndex = #self.currentSession.entries + 1
+  end
+  
+  self:AddEvent("travel", eventData)
+  
+  -- Verify flight after 3 seconds - remove entry if player is not actually on taxi
+  if C_Timer and C_Timer.NewTimer then
+    -- Cancel any existing verification timer
+    if self.flightVerificationTimer then
+      self.flightVerificationTimer:Cancel()
+      self.flightVerificationTimer = nil
+    end
+    
+    self.flightVerificationTimer = C_Timer.NewTimer(3, function()
+      if not UnitOnTaxi("player") then
+        -- Flight didn't actually start - remove the entry we just added
+        if self.currentSession and self.currentSession.entries and entryIndex then
+          -- Find and remove the entry (entryIndex might have shifted due to deduplication)
+          for i = #self.currentSession.entries, 1, -1 do
+            local entry = self.currentSession.entries[i]
+            if entry.type == "travel" and entry.data and entry.data.action == "flight_start" then
+              local entryOrigin = entry.data.origin
+              local entryDest = entry.data.destination
+              if entryOrigin == origin and entryDest == dest then
+                -- This should be our entry - remove it
+                table.remove(self.currentSession.entries, i)
+                self.flightState.onTaxi = false
+                self.flightState.startedAt = nil
+                self:DebugLog("Removed flight_start entry - flight verification failed")
+                if self.uiFrame and self.uiFrame:IsShown() and self.RefreshUI then
+                  self:RefreshUI()
+                end
+                break
+              end
+            end
+          end
+        end
+      end
+      self.flightVerificationTimer = nil
+    end)
+  end
+end
+
+function Journal:CaptureTaxiOrigin()
+  if not NumTaxiNodes then
+    return
+  end
+  for i = 1, NumTaxiNodes() do
+    if TaxiNodeGetType(i) == "CURRENT" then
+      local nodeName = TaxiNodeName(i)
+      if nodeName and nodeName ~= "" then
+        local location, zone = nodeName:match("^([^,]+),?%s*(.*)$")
+        self.flightState.originName = location or nodeName
+        if zone and zone ~= "" then
+          self.flightState.originZone = zone
+        end
+      end
+      return
+    end
+  end
+end
+
+function Journal:CaptureTaxiDestination(index)
+  if not index or index <= 0 then
+    return
+  end
+  local nodeName = TaxiNodeName(index)
+  if not nodeName or nodeName == "" then
+    return
+  end
+  local location, zone = nodeName:match("^([^,]+),?%s*(.*)$")
+  location = location or nodeName
+  self.flightState.destinationName = location
+  self.flightState.destinationZone = zone
+  if GetNumRoutes and GetNumRoutes(index) and GetNumRoutes(index) > 0 then
+    local hops = {}
+    for routeIndex = 1, GetNumRoutes(index) do
+      local sourceSlot = TaxiGetNodeSlot(index, routeIndex, true)
+      local destSlot = TaxiGetNodeSlot(index, routeIndex, false)
+      if sourceSlot and destSlot then
+        local sourceName = TaxiNodeName(sourceSlot)
+        local destName = TaxiNodeName(destSlot)
+        if sourceName and destName then
+          local srcLoc = sourceName:match("^([^,]+)")
+          local dstLoc = destName:match("^([^,]+)")
+          table.insert(hops, { from = srcLoc or sourceName, to = dstLoc or destName })
+        end
+      end
+    end
+    if #hops > 0 then
+      self.flightState.hops = hops
+    end
+  end
+end
+
+function Journal:HandleFlightEnd()
+  if not self.flightState.onTaxi then
+    return
+  end
+  self.flightState.onTaxi = false
+  local zone = GetRealZoneText()
+  local subZone = GetSubZoneText()
+  self:AddEvent("travel", {
+    action = "flight_end",
+    zone = zone,
+    subZone = subZone,
+  })
+  self.flightState.originZone = nil
+  self.flightState.destinationName = nil
+  self.flightState.destinationZone = nil
+  self.flightState.originName = nil
+  self.flightState.startedAt = nil
+  self.flightState.hops = nil
+end
+
+function Journal:HandleZoneChanged()
+  local zone = GetRealZoneText()
+  local subZone = GetSubZoneText()
+  if not zone or zone == "" then
+    return
+  end
+
+  if self.lastZone and zone ~= self.lastZone then
+    if not self.flightState.onTaxi then
+      local fromZone = self.lastZone
+      local fromSub = self.lastSubZone
+      local isHearth = self.lastHearthCastAt and (time() - self.lastHearthCastAt) <= 90
+      local x, y = self:GetPlayerCoords()
+
+      local eventData = {
+        action = isHearth and "hearth" or "zone_change",
+        zone = zone,
+        subZone = subZone,
+        fromZone = fromZone,
+        fromSubZone = fromSub,
+      }
+      if x and y then
+        eventData.x = x
+        eventData.y = y
+        self:DebugLog("Zone change coords: " .. x .. ", " .. y)
+      end
+
+      self:AddEvent("travel", eventData)
+
+      if isHearth then
+        self.lastHearthCastAt = nil
+        self.lastHearthFrom = nil
+        self.pendingHearthCheck = nil
+      end
+    end
+  end
+
+  if not self.lastZone or zone ~= self.lastZone then
+    self.lastZone = zone
+  end
+  self.lastSubZone = subZone
+end
+
+function Journal:HandleSubZoneChanged()
+  local zone = GetRealZoneText()
+  local subZone = GetSubZoneText() or ""
+  if not zone or zone == "" then
+    return
+  end
+
+  -- Only track subzone changes within the same major zone
+  local subZoneChanged = subZone ~= (self.lastSubZone or "")
+  local hasNewSubZone = subZone ~= ""
+  local hadOldSubZone = self.lastSubZone and self.lastSubZone ~= ""
+
+  -- Log if: same zone AND subzone changed AND (entering a named subzone OR leaving a named subzone)
+  if zone == self.lastZone and subZoneChanged and (hasNewSubZone or hadOldSubZone) then
+    -- Skip if on taxi
+    if self.flightState.onTaxi then
+      self.lastSubZone = subZone
+      return
+    end
+
+    -- Initialize ping-pong tracking
+    self.pingPongHistory = self.pingPongHistory or {}
+    local now = time()
+    local fromName = self.lastSubZone ~= "" and self.lastSubZone or zone
+    local toName = subZone ~= "" and subZone or zone
+    
+    -- Check for ping-pong pattern: same two subzones flipping within 5 seconds
+    local pingPongKey = fromName < toName and (fromName .. "|" .. toName) or (toName .. "|" .. fromName)
+    local lastTransition = self.pingPongHistory[pingPongKey]
+    
+    if lastTransition and (now - lastTransition.time) < 5 then
+      -- Ping-pong detected! Check if we already logged boundary noise
+      if not lastTransition.loggedBoundaryNoise then
+        -- Log boundary noise event (first time we detect ping-pong for this pair)
+        local boundaryZone = subZone ~= "" and subZone or zone
+        local x, y = self:GetPlayerCoords()
+        local eventData = {
+          action = "boundary_noise",
+          zone = zone,
+          subZone = boundaryZone,
+        }
+        if x and y then
+          eventData.x = x
+          eventData.y = y
+        end
+        self:AddEvent("travel", eventData)
+        lastTransition.loggedBoundaryNoise = true
+        lastTransition.time = now  -- Update time to extend suppression window
+      end
+      -- Suppress this transition (either first boundary noise or subsequent ones)
+      self.lastSubZone = subZone
+      return
+    end
+    
+    -- Not ping-pong, or ping-pong window expired - reset tracking for this pair
+    self.pingPongHistory[pingPongKey] = {
+      time = now,
+      loggedBoundaryNoise = false,
+    }
+    
+    -- Clean old ping-pong entries (older than 10 seconds)
+    for k, v in pairs(self.pingPongHistory) do
+      if (now - v.time) >= 10 then
+        self.pingPongHistory[k] = nil
+      end
+    end
+
+    -- Debounce: don't log if we just logged this subzone recently
+    self.subZoneDebounce = self.subZoneDebounce or {}
+    local key = zone .. ":" .. subZone
+    if self.subZoneDebounce[key] and (now - self.subZoneDebounce[key]) < 10 then
+      self:DebugLog("Subzone debounced: " .. (subZone ~= "" and subZone or zone) .. " (seen " .. (now - self.subZoneDebounce[key]) .. "s ago)")
+      self.lastSubZone = subZone
+      return
+    end
+    self.subZoneDebounce[key] = now
+
+    -- Clean old debounce entries (keep last 10)
+    local count = 0
+    for _ in pairs(self.subZoneDebounce) do count = count + 1 end
+    if count > 10 then
+      local oldest_key, oldest_time = nil, now
+      for k, t in pairs(self.subZoneDebounce) do
+        if t < oldest_time then
+          oldest_key, oldest_time = k, t
+        end
+      end
+      if oldest_key then
+        self.subZoneDebounce[oldest_key] = nil
+      end
+    end
+
+    local toName = subZone ~= "" and subZone or zone
+    local fromName = self.lastSubZone ~= "" and self.lastSubZone or "unknown"
+    self:DebugLog("Subzone change: " .. fromName .. " -> " .. toName)
+    
+    local x, y = self:GetPlayerCoords()
+    if x and y then
+      self:DebugLog("Subzone change coords: " .. x .. ", " .. y)
+    else
+      self:DebugLog("Subzone change coords: unavailable")
+    end
+
+    local eventData = {
+      action = "subzone_change",
+      zone = zone,
+      subZone = subZone,
+      fromSubZone = self.lastSubZone,
+    }
+    if x and y then
+      eventData.x = x
+      eventData.y = y
+    end
+
+    self:AddEvent("travel", eventData)
+  end
+
+  self.lastSubZone = subZone
+end
+
+Journal:RegisterRenderer("discovery", function(data)
+  local text = "Discovered: " .. (data.discoveredZone or "unknown")
+  if data.xp and data.xp > 0 then
+    text = text .. " (" .. data.xp .. " XP)"
+  end
+  return text
+end)
+
+Journal:RegisterRenderer("travel", function(data)
+  if data.action == "flight_start" then
+    local text = "Started flying"
+    if data.destination then
+      text = text .. " to " .. data.destination
+    end
+    if data.origin then
+      text = text .. " from " .. data.origin
+    end
+    return text .. "."
+  elseif data.action == "flight_end" then
+    return "Landed in " .. (data.zone or "unknown") .. "."
+  elseif data.action == "hearth" then
+    local toText = data.subZone and data.subZone ~= ""
+      and (data.zone .. " - " .. data.subZone) or data.zone
+    local fromText = data.fromSubZone and data.fromSubZone ~= ""
+      and (data.fromZone .. " - " .. data.fromSubZone) or data.fromZone
+    return "Hearth to " .. (toText or "unknown") .. " from " .. (fromText or "unknown") .. "."
+  elseif data.action == "boundary_noise" then
+    local zoneName = (data.subZone and data.subZone ~= "") and data.subZone or data.zone or "unknown"
+    return "Border dancing near " .. zoneName .. "."
+  elseif data.action == "subzone_change" then
+    local toText = (data.subZone and data.subZone ~= "") and data.subZone or data.zone or "unknown"
+    local fromText = (data.fromSubZone and data.fromSubZone ~= "") and data.fromSubZone or data.zone or "unknown"
+    return "Entered " .. toText .. " (from " .. fromText .. ")."
+  else
+    local toText = data.subZone and data.subZone ~= ""
+      and (data.zone .. " - " .. data.subZone) or data.zone
+    local fromText = data.fromSubZone and data.fromSubZone ~= ""
+      and (data.fromZone .. " - " .. data.fromSubZone) or data.fromZone
+    return "Traveled to " .. (toText or "unknown") .. " from " .. (fromText or "unknown") .. "."
+  end
+end)
+
+Journal.On("CHAT_MSG_SYSTEM", function(msg)
+  if msg and msg ~= "" then
+    local cleaned = msg:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    
+    -- Check for zone discovery: "Discovered [Zone Name]: X experience gained"
+    local zoneName, xpAmount = cleaned:match("^Discovered (.+): (%d+) experience gained$")
+    if zoneName and zoneName ~= "" then
+      local zone = GetRealZoneText()
+      local subZone = GetSubZoneText()
+      local x, y = Journal:GetPlayerCoords()
+      
+      local xpValue = tonumber(xpAmount) or nil
+      local eventData = {
+        zone = zone,
+        subZone = (subZone and subZone ~= "") and subZone or nil,
+        discoveredZone = zoneName,
+        xp = xpValue,
+      }
+      if x and y then
+        eventData.x = x
+        eventData.y = y
+      end
+      
+      -- Track discovery XP to suppress duplicate PLAYER_XP_UPDATE events
+      if xpValue and xpValue > 0 then
+        local now = time()
+        if not Journal.recentDiscoveryXP then
+          Journal.recentDiscoveryXP = {}
+        end
+        table.insert(Journal.recentDiscoveryXP, {
+          amount = xpValue,
+          timestamp = now,
+        })
+        
+        -- Clean up old entries (older than suppression window)
+        while #Journal.recentDiscoveryXP > 0 and (now - Journal.recentDiscoveryXP[1].timestamp) > 3 do
+          table.remove(Journal.recentDiscoveryXP, 1)
+        end
+      end
+      
+      Journal:AddEvent("discovery", eventData)
+      return
+    end
+    
+    -- Check for flight destination
+    local flightDest = cleaned:match("^Taking flight to: %[(.+)%]$")
+    if flightDest and flightDest ~= "" then
+      Journal.flightState.destinationName = flightDest
+      if not Journal.flightState.onTaxi then
+        Journal:HandleFlightStart()
+      end
+    end
+  end
+end)
+
+Journal.On("PLAYER_CONTROL_LOST", function()
+  if UnitOnTaxi("player") and not Journal.flightState.onTaxi then
+    if not Journal.flightState.originName then
+      Journal:CaptureTaxiOrigin()
+    end
+    if not Journal.flightState.destinationName then
+      Journal.flightState.originZone = GetRealZoneText()
+    end
+    Journal:HandleFlightStart()
+  end
+end)
+
+Journal.On("PLAYER_CONTROL_GAINED", function()
+  if Journal.flightState.onTaxi then
+    if C_Timer and C_Timer.After then
+      C_Timer.After(0.5, function()
+        if Journal.flightState.onTaxi and not UnitOnTaxi("player") then
+          Journal:HandleFlightEnd()
+        end
+      end)
+    else
+      if not UnitOnTaxi("player") then
+        Journal:HandleFlightEnd()
+      end
+    end
+  end
+end)
+
+Journal.On("ZONE_CHANGED_NEW_AREA", function()
+  if Journal.flightState.onTaxi and not UnitOnTaxi("player") then
+    Journal:HandleFlightEnd()
+  end
+  Journal:HandleZoneChanged()
+end)
+
+Journal.On("ZONE_CHANGED", function()
+  Journal:HandleSubZoneChanged()
+end)
+
+Journal.On("PLAYER_ENTERING_WORLD", function()
+  if Journal.pendingHearthCheck then
+    if C_Timer and C_Timer.After then
+      C_Timer.After(0.5, function()
+        if Journal.pendingHearthCheck then
+          Journal:HandleZoneChanged()
+          Journal.pendingHearthCheck = nil
+        end
+      end)
+    else
+      Journal:HandleZoneChanged()
+      Journal.pendingHearthCheck = nil
+    end
+  end
+end)
+
+function Journal:IsHearthSpell(spellName, spellId)
+  if not spellName or spellName == "" then
+    return false
+  end
+  local getSpellInfo = rawget(_G, "GetSpellInfo")
+  local hearthIds = { 8690, 556 }
+  for _, id in ipairs(hearthIds) do
+    local name = getSpellInfo and getSpellInfo(id)
+    if name and spellName == name then
+      return true
+    end
+    if spellId and spellId == id then
+      return true
+    end
+  end
+  local hearthNames = {
+    "Hearthstone",
+    "Innkeeper's Daughter",
+    "Astral Recall",
+    "Home",
+  }
+  for _, name in ipairs(hearthNames) do
+    if spellName:find(name, 1, true) then
+      return true
+    end
+  end
+  return false
+end
+
+Journal.On("UNIT_SPELLCAST_SUCCEEDED", function(unit, spellName, ...)
+  if unit == "player" and spellName then
+    local spellId = nil
+    for i = 1, select("#", ...) do
+      local v = select(i, ...)
+      if type(v) == "number" then
+        spellId = v
+        break
+      end
+    end
+    if Journal:IsHearthSpell(spellName, spellId) then
+      Journal.lastHearthCastAt = time()
+      local zone = GetRealZoneText()
+      local subZone = GetSubZoneText()
+      Journal.lastHearthFrom = (subZone and subZone ~= "" and (zone .. " - " .. subZone)) or zone
+      Journal.pendingHearthCheck = true
+      if C_Timer and C_Timer.After then
+        C_Timer.After(2.0, function()
+          if Journal.pendingHearthCheck then
+            Journal:HandleZoneChanged()
+            Journal.pendingHearthCheck = nil
+          end
+        end)
+      end
+    end
+  end
+end)
+
+hooksecurefunc("TakeTaxiNode", function(index)
+  if not Journal.flightState.onTaxi then
+    Journal:CaptureTaxiOrigin()
+    Journal:CaptureTaxiDestination(index)
+    Journal:HandleFlightStart()
+  end
+end)

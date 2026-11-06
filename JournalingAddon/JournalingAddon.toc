@@ -1,0 +1,24 @@
+## Interface: 20505
+## Title: JournalingAddon
+## Notes: Session-based journal log.
+## Author: asbjborg
+## Version: 0.6.31
+## SavedVariables: JournalDB
+
+core/Namespace.lua
+core/Util.lua
+core/Storage.lua
+core/Renderers.lua
+core/Events.lua
+features/Combat.lua
+features/Quest.lua
+features/Party.lua
+features/Afk.lua
+features/Equipment.lua
+features/Travel.lua
+features/Reputation.lua
+features/Screenshots.lua
+features/Notes.lua
+features/Level.lua
+features/Profession.lua
+JournalUI.lua
