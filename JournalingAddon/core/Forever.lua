@@ -96,6 +96,67 @@ function Forever.shouldCountKill(previous, source, at, window)
   return true
 end
 
+-- Registering these events fires ADDON_ACTION_FORBIDDEN on Forever / Midnight.
+-- pcall does not swallow that notice. Do not call RegisterEvent for them.
+Forever.forbiddenRegistration = {
+  COMBAT_LOG_EVENT = true,
+  COMBAT_LOG_EVENT_UNFILTERED = true,
+}
+
+Forever.loadEventNames = {
+  "PLAYER_LOGIN",
+  "PLAYER_LOGOUT",
+  "QUEST_ACCEPTED",
+  "QUEST_TURNED_IN",
+  "CHAT_MSG_SYSTEM",
+  "PLAYER_XP_UPDATE",
+  "CHAT_MSG_LOOT",
+  "CHAT_MSG_MONEY",
+  "PLAYER_CONTROL_LOST",
+  "PLAYER_CONTROL_GAINED",
+  "PLAYER_EQUIPMENT_CHANGED",
+  "PLAYER_ENTERING_WORLD",
+  "ZONE_CHANGED_NEW_AREA",
+  "ZONE_CHANGED",
+  "PLAYER_DEAD",
+  "PLAYER_REGEN_ENABLED",
+  "PLAYER_REGEN_DISABLED",
+  "PLAYER_LEVEL_UP",
+  "UNIT_SPELLCAST_SUCCEEDED",
+  "SCREENSHOT_SUCCEEDED",
+  "CHAT_MSG_COMBAT_FACTION_CHANGE",
+  "CHAT_MSG_SKILL",
+  "CHAT_MSG_COMBAT_XP_GAIN",
+  "PARTY_INVITE_REQUEST",
+  "GROUP_ROSTER_UPDATE",
+}
+
+function Forever.registrationDecision(eventName)
+  if Forever.forbiddenRegistration[eventName] then
+    return "skip-forbidden"
+  end
+  return "register"
+end
+
+-- registerFn is called only for events the client still allows.
+-- A forbidden name is recorded and never passed to registerFn.
+function Forever.applyRegistrations(eventNames, registerFn)
+  local results = {}
+  for _, eventName in ipairs(eventNames) do
+    if Forever.registrationDecision(eventName) == "skip-forbidden" then
+      results[eventName] = "skipped-forbidden"
+    else
+      local ok, err = pcall(registerFn, eventName)
+      if ok then
+        results[eventName] = "registered"
+      else
+        results[eventName] = tostring(err)
+      end
+    end
+  end
+  return results
+end
+
 -- Schema stays v3. A different schemaVersion must not wipe sessions.
 function Forever.databaseAction(db, currentSchema)
   if type(db) ~= "table" then

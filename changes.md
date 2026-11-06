@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.33] - 2026-11-06
+
+### Fixed
+
+- Do not register `COMBAT_LOG_EVENT_UNFILTERED`. On Forever that registration is a protected call and raises `ADDON_ACTION_FORBIDDEN` even inside `pcall`.
+- Kill names and kill XP still come from the combat XP chat line. A death entry no longer includes a killer, spell, or level from the combat log.
+
 ## [0.6.32] - 2026-11-06
 
 Forever-only port of 0.6.31. Schema stays 3, so existing journals are not wiped.

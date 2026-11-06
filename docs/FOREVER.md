@@ -13,12 +13,12 @@ Sessions, entry shape, text export, and NDJSON export are the same v3 records: `
 | Area | Behavior |
 | --- | --- |
 | TOC | `Interface: 16001` and `Interface-Camelot: 16001`. `JournalingAddon.toc` and `JournalingAddon_Camelot.toc` are the same file list. |
-| Events | Each `RegisterEvent` is protected. `PARTY_MEMBERS_CHANGED` is not registered. Roster updates use `GROUP_ROSTER_UPDATE`. |
+| Events | Unknown event names are caught as Lua errors. `PARTY_MEMBERS_CHANGED` is absent. Roster updates use `GROUP_ROSTER_UPDATE`. |
 | Party size | `GetNumSubgroupMembers`, then `party1`..`partyN`. |
 | Names | `UnitName`'s second return is treated as a surname, not a realm. Hyphens in the given name stay. The realm comes from `GetRealmName`. |
 | Quests | `QUEST_ACCEPTED` is read as a quest id. The title comes from `C_QuestLog.GetTitleForQuestID`. |
 | Hearth | Spell ids 8690 and 556. `C_Spell.GetSpellInfo` is read as a table. |
-| Combat | `CombatLogGetCurrentEventInfo` is called only if it exists, inside `pcall`. Secret values are skipped. A kill name is also taken from `X dies, you gain N experience` when the log did not already count that kill. |
+| Combat | `COMBAT_LOG_EVENT_UNFILTERED` is not registered. Kill names and kill XP come from `X dies, you gain N experience`. |
 | Taxi | `TakeTaxiNode` is hooked only when the function exists. Flight chat and `UnitOnTaxi` still start and end flights. |
 | Quests in story-writer | The Burning Crusade Wowhead URL is refused. Recorded `msg` is not replaced. |
 | Install | `deploy.sh` exits without copying. |
@@ -45,7 +45,7 @@ lua5.4 tests/forever_compat_test.lua
 cd story-writer && npm test
 ```
 
-`tests/forever_compat_test.lua` checks name, surname, hyphens, quest id, spell-info tables, hearth ids, the XP kill line, double-counting across combat log and chat, and the keep-on-schema-mismatch decision.
+`tests/forever_compat_test.lua` checks name, surname, hyphens, quest id, spell-info tables, hearth ids, the XP kill line, double-counting across combat log and chat, the keep-on-schema-mismatch decision, and a simulated `ADDON_ACTION_FORBIDDEN` notice. The simulation records the notice when a combat-log registration is attempted, including through `pcall`, and checks that the load list never makes that attempt.
 
 `story-writer/test/forever-catalog.test.js` checks that an empty URL and `https://www.wowhead.com/tbc/quest=` produce an error and no quest title, that the example session's `msg` survives enrichment, that the workflow file does not hard-code that TBC URL, that the two TOC files match, and that `InitDB` does not call `ResetDatabase`.
 
@@ -53,12 +53,12 @@ cd story-writer && npm test
 
 Run these on a Forever character. A static test passing does not check any of them.
 
-1. **Load.** Addon list shows JournalingAddon 0.6.32. No BugSack error on login or `/reload`. `/journal compat` shows interface `16001`. If the addon is missing, say whether the client loaded `JournalingAddon.toc` or `JournalingAddon_Camelot.toc`.
+1. **Load.** Addon list shows JournalingAddon 0.6.33. No `ADDON_ACTION_FORBIDDEN` on login or `/reload`. `/journal compat` shows interface `16001` and `combatLog not-registered`. If the addon is missing, say whether the client loaded `JournalingAddon.toc` or `JournalingAddon_Camelot.toc`.
 2. **Data kept.** Session count from `/journal compat` is unchanged across a `/reload`. Do not run `/journal wipe` for this check.
 3. **Project id.** Write down `projectId` and `projectCamelot` from `/journal compat`. Do not treat a mismatch with the notes below as an addon failure by itself. The addon does not branch on that number.
 4. **Note.** `/journal note`, save one sentence. The line in the window is `Note: ` plus that sentence.
 5. **Quest.** Accept a quest. The line is `Accepted: <title> (<id>)`. The id should match the quest, not a small log index such as 1 or 2. If the title is `Quest <number>`, `C_QuestLog.GetTitleForQuestID` did not return a name.
-6. **Kill.** Kill one creature that grants experience. The activity line should name that creature. Then `/journal compat` and note `combatLog` (`readable`, `getter-missing`, `getter-error`, `unreadable`, or `unseen`).
+6. **Kill.** Kill one creature that grants experience. The activity line should name that creature from the XP chat line. `/journal compat` should keep `combatLog not-registered`. A death still logs `Died.` and does not name the attacker.
 7. **Name.** The character key should show the portrait name, including a surname and any hyphen, then the realm from the character select screen. A second character with a different surname must not share the key.
 8. **Party.** Join one other player. Expect a join line with their name, hyphen included if they have one. Leave. Expect a leave line. No error on the roster update.
 9. **Hearth.** Use the hearthstone. After the zone change, the line should be a hearth line rather than a plain zone change. Note the spell id if you can (`/dump C_Spell.GetSpellInfo(8690)`).
@@ -76,7 +76,7 @@ Run these on a Forever character. A static test passing does not check any of th
 | Quest accept payload | Classic passes log index then id and reads `GetQuestLogTitle`. ForeverPlusPlus lists `GetQuestLogTitle` as removed and `C_QuestLog` as present. Mainline `QUEST_ACCEPTED` is the quest id. | Forever-only: one numeric argument, title from `C_QuestLog.GetTitleForQuestID`. | Step 5. A small id means the payload is still index-first. |
 | `C_Spell.GetSpellInfo` | ForeverPlusPlus and the cheat sheet: the call returns one table, not the old multi-value `GetSpellInfo`. Hearth ids 8690 and 556 are the usual spells. | Table field `name`, plus those two ids. | Step 9. |
 | Surname | ForeverPlusPlus, in-game 2026-09-25: `UnitName("player")` returned `"Clutch", "Bloodfury"`. The same note says names can be `First Surname` or `First-Surname`, and the part after `-` is not a realm. | Second return is appended with a space when it differs from `GetRealmName`. Hyphens are not stripped. | Step 7. If the portrait uses a hyphen between the two parts, say so. The key would still contain both parts. |
-| Combat log | ForeverPlusPlus: `CombatLogGetCurrentEventInfo` is gone, and `COMBAT_LOG_EVENT_UNFILTERED` never fired for the addons they read. The cheat sheet says that is unverified and not a reason to delete kill tracking. Separate community posts disagree. | The event stays registered. The getter is optional and guarded. The English XP line still supplies a kill name, and the two sources do not double-count inside 1.5 seconds. | Step 6. A localized chat line will not match `dies, you gain`. |
+| Combat log | Warcraft Wiki, Patch 12.0.0: registering the combat log event fires `ADDON_ACTION_FORBIDDEN`. Ace3 issue 697 names `COMBAT_LOG_EVENT_UNFILTERED` as the blocked registration. Forever uses that 12.x UI. Installed 0.6.32 raised the notice once, from `Events.lua` line 43, which was `pcall` around `RegisterEvent`. The reported function name was `UNKNOWN()` because the frame is unnamed and the method was passed into `pcall` as a raw function. | The combat log event is not registered. `pcall` is not used to hide that call. Kill names still come from the XP chat line. Death entries no longer carry a combat-log killer, spell, or level. | Step 6. A localized chat line will not match `dies, you gain`. |
 | `TakeTaxiNode` | ForeverPlusPlus marks `TakeTaxiNode(slot)` unverified on the live client. | Hook only when the global is a function. Other flight signals remain. | Step 10. |
 | SavedVariables | ForeverPlusPlus: they persist after the 2026-09-24 fix, and they did not on 2026-09-23. | No workaround added. `/journal compat` session count is the check. | Step 2. |
 | Install directory | Sources disagree (`_forever_` vs `_classic_beta_`). | Not chosen here. | Whichever folder has interface 16001. |

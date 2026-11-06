@@ -8,45 +8,14 @@ frame:SetScript("OnEvent", function(_, event, ...)
   Journal.Emit(event, ...)
 end)
 
-local events = {
-  "PLAYER_LOGIN",
-  "PLAYER_LOGOUT",
-  "QUEST_ACCEPTED",
-  "QUEST_TURNED_IN",
-  "CHAT_MSG_SYSTEM",
-  "PLAYER_XP_UPDATE",
-  "COMBAT_LOG_EVENT_UNFILTERED",
-  "CHAT_MSG_LOOT",
-  "CHAT_MSG_MONEY",
-  "PLAYER_CONTROL_LOST",
-  "PLAYER_CONTROL_GAINED",
-  "PLAYER_EQUIPMENT_CHANGED",
-  "PLAYER_ENTERING_WORLD",
-  "ZONE_CHANGED_NEW_AREA",
-  "ZONE_CHANGED",
-  "PLAYER_DEAD",
-  "PLAYER_REGEN_ENABLED",
-  "PLAYER_REGEN_DISABLED",
-  "PLAYER_LEVEL_UP",
-  "UNIT_SPELLCAST_SUCCEEDED",
-  "SCREENSHOT_SUCCEEDED",
-  "CHAT_MSG_COMBAT_FACTION_CHANGE",
-  "CHAT_MSG_SKILL",
-  "CHAT_MSG_COMBAT_XP_GAIN",
-  -- Forever roster event. PARTY_MEMBERS_CHANGED is not registered: an unknown event throws.
-  "PARTY_INVITE_REQUEST",
-  "GROUP_ROSTER_UPDATE",
-}
-
-Journal.eventRegistration = {}
-for _, eventName in ipairs(events) do
-  local ok, err = pcall(frame.RegisterEvent, frame, eventName)
-  if ok then
-    Journal.eventRegistration[eventName] = "registered"
-  else
-    Journal.eventRegistration[eventName] = tostring(err)
-  end
-end
+-- PARTY_MEMBERS_CHANGED is not in this list: an unknown event throws.
+-- COMBAT_LOG_EVENT_UNFILTERED is not registered: Forever treats that
+-- registration as a protected call and emits ADDON_ACTION_FORBIDDEN.
+-- pcall does not stop that notice, so applyRegistrations never calls it.
+Journal.eventRegistration = Journal.Forever.applyRegistrations(Journal.Forever.loadEventNames, function(eventName)
+  frame:RegisterEvent(eventName)
+end)
+Journal.combatLogState = "not-registered"
 
 function Journal:ReportCompat()
   local function say(text)

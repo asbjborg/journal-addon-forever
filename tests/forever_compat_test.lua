@@ -56,6 +56,57 @@ expect("matching schema keeps", Forever.databaseAction(kept, 3), "keep")
 expect("mismatched schema still keeps", Forever.databaseAction({ schemaVersion = 2, sessions = { { entries = {} } } }, 3), "keep-mismatch")
 expect("nil database creates", Forever.databaseAction(nil, 3), "create")
 
+expect("cleu is forbidden", Forever.registrationDecision("COMBAT_LOG_EVENT_UNFILTERED"), "skip-forbidden")
+expect("filtered combat log is forbidden", Forever.registrationDecision("COMBAT_LOG_EVENT"), "skip-forbidden")
+expect("login stays registered", Forever.registrationDecision("PLAYER_LOGIN"), "register")
+expect("xp chat stays registered", Forever.registrationDecision("CHAT_MSG_COMBAT_XP_GAIN"), "register")
+
+local function countNotices(notices)
+  local n = 0
+  for _ in pairs(notices) do
+    n = n + 1
+  end
+  return n
+end
+
+-- The client records ADDON_ACTION_FORBIDDEN when the protected registration
+-- is attempted. pcall catches the Lua error and still leaves the notice.
+local function clientRegister(eventName, notices)
+  if Forever.forbiddenRegistration[eventName] then
+    notices[#notices + 1] = "ADDON_ACTION_FORBIDDEN UNKNOWN()"
+    error("protected")
+  end
+  return true
+end
+
+local directNotices = {}
+local directOk = pcall(clientRegister, "COMBAT_LOG_EVENT_UNFILTERED", directNotices)
+expect("pcall catches the lua error", directOk, false)
+expect("pcall still records the forbidden notice", countNotices(directNotices), 1)
+expect("notice names the protected call", directNotices[1], "ADDON_ACTION_FORBIDDEN UNKNOWN()")
+
+local loadNotices = {}
+local loadResults = Forever.applyRegistrations(Forever.loadEventNames, function(eventName)
+  return clientRegister(eventName, loadNotices)
+end)
+expect("production load emits no forbidden notice", countNotices(loadNotices), 0)
+expect("production list has no cleu result", loadResults["COMBAT_LOG_EVENT_UNFILTERED"], nil)
+expect("production list registers xp chat", loadResults["CHAT_MSG_COMBAT_XP_GAIN"], "registered")
+expect("production list registers roster", loadResults["GROUP_ROSTER_UPDATE"], "registered")
+
+local mixedNotices = {}
+local mixedResults = Forever.applyRegistrations({
+  "PLAYER_LOGIN",
+  "COMBAT_LOG_EVENT_UNFILTERED",
+  "CHAT_MSG_LOOT",
+}, function(eventName)
+  return clientRegister(eventName, mixedNotices)
+end)
+expect("a listed cleu is not called", countNotices(mixedNotices), 0)
+expect("a listed cleu is skipped", mixedResults["COMBAT_LOG_EVENT_UNFILTERED"], "skipped-forbidden")
+expect("neighbors of cleu still register", mixedResults["PLAYER_LOGIN"], "registered")
+expect("loot still registers", mixedResults["CHAT_MSG_LOOT"], "registered")
+
 if failures > 0 then
   io.stderr:write(failures .. " failure(s)\n")
   os.exit(1)

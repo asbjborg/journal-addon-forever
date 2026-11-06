@@ -79,7 +79,7 @@ test('Forever TOC files match and do not declare the TBC interface', () => {
   );
   assert.equal(base, camelot);
   assert.match(base, /## Interface: 16001/);
-  assert.match(base, /## Version: 0\.6\.32/);
+  assert.match(base, /## Version: 0\.6\.33/);
   assert.match(base, /core\/Forever\.lua/);
   assert.equal(base.includes('20505'), false);
 });
@@ -93,6 +93,10 @@ test('load path keeps journals and does not register the old party event', () =>
   assert.match(storage, /CURRENT_SCHEMA = 3/);
 
   const events = fs.readFileSync(path.join(repoRoot, 'JournalingAddon', 'core', 'Events.lua'), 'utf8');
-  assert.match(events, /"GROUP_ROSTER_UPDATE"/);
-  assert.equal(events.includes('"PARTY_MEMBERS_CHANGED"'), false);
+  const rules = fs.readFileSync(path.join(repoRoot, 'JournalingAddon', 'core', 'Forever.lua'), 'utf8');
+  assert.match(rules, /"GROUP_ROSTER_UPDATE"/);
+  assert.equal(rules.includes('"PARTY_MEMBERS_CHANGED"'), false);
+  assert.match(events, /applyRegistrations/);
+  assert.equal(events.includes('frame.RegisterEvent'), false);
+  assert.match(rules, /COMBAT_LOG_EVENT_UNFILTERED = true/);
 });
