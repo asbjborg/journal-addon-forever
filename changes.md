@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.34] - 2026-11-08
+
+### Added
+
+- **Minimap button** (#2)
+  - Left-click toggles the journal window, the same action as `/journal` with no extra arguments
+  - Tooltip names JournalingAddon and says that left-click toggles the journal
+  - Dragging the button stores its angle in `JournalDB.settings.minimapAngle`
+  - That write does not touch session entries and does not change the schema
+  - Slash commands are unchanged
+
 ## [0.6.33] - 2026-11-06
 
 ### Fixed

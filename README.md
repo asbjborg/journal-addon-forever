@@ -40,12 +40,13 @@ Paths differ by install. This repository has not been checked against a live cli
 
 ### Opening the Journal
 - Type `/journal` in chat to open/close the journal UI
+- Left-click the book button on the minimap to open and close that same window. Drag the button to move it. The angle is stored in `JournalDB.settings.minimapAngle` and does not change session entries or the schema.
 - Use the dropdown to select different sessions
 - Click "Export" to copy a session as plain text
 - Click "JSON" to export as NDJSON (one JSON object per line) for automation (e.g. [story-writer](story-writer/) workflows)
 
 ### Commands
-- `/journal` - Toggle the journal UI
+- `/journal` - Toggle the journal UI (the minimap button does the same thing)
 - `/journal note` - Open dialog to add a standalone note
 - `/journal capture` or `/journal capture-target` - Capture target (or scene) with screenshot and note
 - `/journal undo` - Remove the last entry

@@ -168,6 +168,88 @@ function Forever.databaseAction(db, currentSchema)
   return "keep"
 end
 
+-- Minimap button position is one number on JournalDB.settings.
+-- It is not a session field and it does not change the schema.
+Forever.MINIMAP_ANGLE_KEY = "minimapAngle"
+Forever.DEFAULT_MINIMAP_ANGLE = 225
+Forever.MINIMAP_DRAG_THRESHOLD = 8
+Forever.MINIMAP_PADDING = 5
+
+-- Single-argument math.atan, so the same function runs in WoW and in Lua 5.4.
+function Forever.atan2(y, x)
+  if x > 0 then
+    return math.atan(y / x)
+  end
+  if x < 0 then
+    if y < 0 then
+      return math.atan(y / x) - math.pi
+    end
+    return math.atan(y / x) + math.pi
+  end
+  if y > 0 then
+    return math.pi / 2
+  end
+  if y < 0 then
+    return -math.pi / 2
+  end
+  return 0
+end
+
+function Forever.normalizeDegrees(degrees)
+  return degrees % 360
+end
+
+-- Point on the minimap frame's edge, then padding further out along the same ray.
+-- A circle would tuck the button into the corner of a square minimap.
+function Forever.minimapOffset(angleDegrees, halfWidth, halfHeight, padding)
+  local radians = math.rad(angleDegrees)
+  local dx = math.cos(radians)
+  local dy = math.sin(radians)
+  local reach = math.huge
+  if dx ~= 0 then
+    reach = math.min(reach, halfWidth / math.abs(dx))
+  end
+  if dy ~= 0 then
+    reach = math.min(reach, halfHeight / math.abs(dy))
+  end
+  local x = dx * reach
+  local y = dy * reach
+  local length = math.sqrt(x * x + y * y)
+  return x + (x / length) * padding, y + (y / length) * padding
+end
+
+function Forever.minimapAngleDegrees(dx, dy)
+  return Forever.normalizeDegrees(math.deg(Forever.atan2(dy, dx)))
+end
+
+function Forever.savedMinimapAngle(settings)
+  local angle = settings[Forever.MINIMAP_ANGLE_KEY]
+  if angle == nil then
+    return Forever.DEFAULT_MINIMAP_ANGLE
+  end
+  return Forever.normalizeDegrees(angle)
+end
+
+function Forever.storeMinimapAngle(db, angle)
+  db.settings[Forever.MINIMAP_ANGLE_KEY] = Forever.normalizeDegrees(angle)
+end
+
+-- A left click that did not move past the drag threshold toggles the journal.
+-- Any other button, and a left button that dragged, does not.
+function Forever.minimapShouldToggle(button, dx, dy)
+  if button ~= "LeftButton" then
+    return false
+  end
+  if math.abs(dx) + math.abs(dy) > Forever.MINIMAP_DRAG_THRESHOLD then
+    return false
+  end
+  return true
+end
+
+function Forever.minimapTooltip()
+  return "JournalingAddon", "Left-click to toggle the journal"
+end
+
 if type(Journal) == "table" then
   Journal.Forever = Forever
 end

@@ -22,6 +22,7 @@ Sessions, entry shape, text export, and NDJSON export are the same v3 records: `
 | Taxi | `TakeTaxiNode` is hooked only when the function exists. Flight chat and `UnitOnTaxi` still start and end flights. |
 | Quests in story-writer | The Burning Crusade Wowhead URL is refused. Recorded `msg` is not replaced. |
 | Install | `deploy.sh` exits without copying. |
+| Minimap | A book button on the minimap. Left-click calls the same toggle as `/journal`. Dragging saves `JournalDB.settings.minimapAngle` and leaves sessions and schema 3 alone. |
 
 `/journal compat` prints schema, session count, character key, combat-log state, taxi hook, build, and `WOW_PROJECT_ID`.
 
@@ -45,7 +46,7 @@ lua5.4 tests/forever_compat_test.lua
 cd story-writer && npm test
 ```
 
-`tests/forever_compat_test.lua` checks name, surname, hyphens, quest id, spell-info tables, hearth ids, the XP kill line, double-counting across combat log and chat, the keep-on-schema-mismatch decision, and a simulated `ADDON_ACTION_FORBIDDEN` notice. The simulation records the notice when a combat-log registration is attempted, including through `pcall`, and checks that the load list never makes that attempt.
+`tests/forever_compat_test.lua` checks name, surname, hyphens, quest id, spell-info tables, hearth ids, the XP kill line, double-counting across combat log and chat, the keep-on-schema-mismatch decision, and a simulated `ADDON_ACTION_FORBIDDEN` notice. The simulation records the notice when a combat-log registration is attempted, including through `pcall`, and checks that the load list never makes that attempt. It also checks the minimap button: a still left-click toggles, a drag and any other mouse button do not, the tooltip names JournalingAddon, and saving the angle leaves a synthetic session's entries and schema version untouched. Reading an unset angle does not create the settings key.
 
 `story-writer/test/forever-catalog.test.js` checks that an empty URL and `https://www.wowhead.com/tbc/quest=` produce an error and no quest title, that the example session's `msg` survives enrichment, that the workflow file does not hard-code that TBC URL, that the two TOC files match, and that `InitDB` does not call `ResetDatabase`.
 
@@ -53,7 +54,7 @@ cd story-writer && npm test
 
 Run these on a Forever character. A static test passing does not check any of them.
 
-1. **Load.** Addon list shows JournalingAddon 0.6.33. No `ADDON_ACTION_FORBIDDEN` on login or `/reload`. `/journal compat` shows interface `16001` and `combatLog not-registered`. If the addon is missing, say whether the client loaded `JournalingAddon.toc` or `JournalingAddon_Camelot.toc`.
+1. **Load.** Addon list shows JournalingAddon 0.6.34. No `ADDON_ACTION_FORBIDDEN` on login or `/reload`. `/journal compat` shows interface `16001` and `combatLog not-registered`. If the addon is missing, say whether the client loaded `JournalingAddon.toc` or `JournalingAddon_Camelot.toc`.
 2. **Data kept.** Session count from `/journal compat` is unchanged across a `/reload`. Do not run `/journal wipe` for this check.
 3. **Project id.** Write down `projectId` and `projectCamelot` from `/journal compat`. Do not treat a mismatch with the notes below as an addon failure by itself. The addon does not branch on that number.
 4. **Note.** `/journal note`, save one sentence. The line in the window is `Note: ` plus that sentence.
@@ -64,6 +65,7 @@ Run these on a Forever character. A static test passing does not check any of th
 9. **Hearth.** Use the hearthstone. After the zone change, the line should be a hearth line rather than a plain zone change. Note the spell id if you can (`/dump C_Spell.GetSpellInfo(8690)`).
 10. **Flight.** Take one taxi. Expect a flight-start line. `/journal compat` shows `taxiHook` as `hooked` or `TakeTaxiNode missing`. If the destination is blank, the hook was missing and the `Taking flight to:` chat line did not fire. That is a known gap, not a reason to delete flight tracking.
 11. **Export.** Select the session, click JSON. The note line's `msg` equals the journal window. `v` is 3.
+12. **Minimap.** A book button sits on the minimap edge. The tooltip title is `JournalingAddon`, and the next line says left-click toggles the journal. Left-click opens the same window as `/journal`. Left-click again closes it. `/journal note` still opens the note dialog. Drag the button, `/reload`, and it should stay where you left it. `/journal compat` session count is unchanged across that reload. Do not run `/journal wipe` for this check. If the button is missing, copy the Lua error from login.
 
 ## Evidence and unknowns
 

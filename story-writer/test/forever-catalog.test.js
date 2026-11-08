@@ -79,8 +79,9 @@ test('Forever TOC files match and do not declare the TBC interface', () => {
   );
   assert.equal(base, camelot);
   assert.match(base, /## Interface: 16001/);
-  assert.match(base, /## Version: 0\.6\.33/);
+  assert.match(base, /## Version: 0\.6\.34/);
   assert.match(base, /core\/Forever\.lua/);
+  assert.match(base, /features\/Minimap\.lua/);
   assert.equal(base.includes('20505'), false);
 });
 
