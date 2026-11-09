@@ -246,8 +246,101 @@ function Forever.minimapShouldToggle(button, dx, dy)
   return true
 end
 
+-- "toggle" opens the journal, "menu" opens the command menu, "none" does neither.
+function Forever.minimapClickAction(button, dx, dy)
+  if Forever.minimapShouldToggle(button, dx, dy) then
+    return "toggle"
+  end
+  if button == "RightButton" then
+    return "menu"
+  end
+  return "none"
+end
+
 function Forever.minimapTooltip()
-  return "JournalingAddon", "Left-click to toggle the journal"
+  return "JournalingAddon", "Left-click to toggle the journal", "Right-click for commands"
+end
+
+-- Slash tokens and the minimap menu share this list.
+-- menu = false for commands that delete an entry, clear a session, or wipe the database.
+-- The bare /journal command is the empty token.
+Forever.JOURNAL_COMMANDS = {
+  { token = "note", label = "Add note…", menu = true, method = "ShowNoteCaptureDialog" },
+  { token = "", label = "Open/close journal", menu = true, method = "ToggleUI" },
+  { token = "compat", label = "Compat check", menu = true, method = "ReportCompat" },
+  { token = "help", label = "Help", menu = true, method = "ShowJournalHelp" },
+  { token = "capture", label = "Capture…", menu = true, method = "ShowTargetCaptureDialog" },
+  { token = "reset", label = "New session", menu = true, method = "ResetJournalSession" },
+  { token = "debug", label = "Toggle debug", menu = true, method = "ToggleJournalDebug" },
+  { token = "undo", label = "Undo last entry", menu = false, method = "UndoJournalEntry" },
+  { token = "clear", label = "Clear session", menu = false, method = "ClearJournalSession" },
+  { token = "wipe", label = "Wipe journal", menu = false, method = "WipeJournalData" },
+}
+
+local JOURNAL_ALIASES = {
+  ["capture-target"] = "capture",
+}
+
+function Forever.commandByToken(token)
+  local aliased = JOURNAL_ALIASES[token]
+  if aliased then
+    token = aliased
+  end
+  for _, command in ipairs(Forever.JOURNAL_COMMANDS) do
+    if command.token == token then
+      return command
+    end
+  end
+  return nil
+end
+
+-- Unknown text does what a bare /journal does.
+function Forever.dispatchMethod(token)
+  local command = Forever.commandByToken(token)
+  if command then
+    return command.method
+  end
+  return Forever.commandByToken("").method
+end
+
+function Forever.menuItems()
+  local items = {}
+  for _, command in ipairs(Forever.JOURNAL_COMMANDS) do
+    if command.menu then
+      items[#items + 1] = command
+    end
+  end
+  return items
+end
+
+-- Escape is the key name UISpecialFrames already handles.
+-- "outside" is a click that missed both the menu and the minimap button.
+function Forever.minimapMenuDismiss(signal)
+  return signal == "ESCAPE" or signal == "outside"
+end
+
+-- Blank and whitespace-only notes are not entries.
+-- Text that contains a visible character is stored unchanged.
+function Forever.noteTextToSave(text)
+  if type(text) ~= "string" then
+    return nil
+  end
+  if text:find("%S") == nil then
+    return nil
+  end
+  return text
+end
+
+function Forever.noteEntryData(text)
+  local save = Forever.noteTextToSave(text)
+  if not save then
+    return nil
+  end
+  return {
+    type = "note",
+    data = { text = save },
+    msg = "Note: " .. save,
+  }
 end
 
 if type(Journal) == "table" then

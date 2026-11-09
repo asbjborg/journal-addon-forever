@@ -180,9 +180,125 @@ expect("a diagonal drag does not toggle", Forever.minimapShouldToggle("LeftButto
 expect("right click does not toggle", Forever.minimapShouldToggle("RightButton", 0, 0), false)
 expect("middle click does not toggle", Forever.minimapShouldToggle("MiddleButton", 0, 0), false)
 
-local tipTitle, tipAction = Forever.minimapTooltip()
+local tipTitle, tipLeft, tipRight = Forever.minimapTooltip()
 expect("tooltip names the addon", tipTitle, "JournalingAddon")
-expect("tooltip names the click", tipAction, "Left-click to toggle the journal")
+expect("tooltip names the left click", tipLeft, "Left-click to toggle the journal")
+expect("tooltip names the right click", tipRight, "Right-click for commands")
+
+expect("left click action toggles", Forever.minimapClickAction("LeftButton", 0, 0), "toggle")
+expect("left click inside the drag threshold still toggles", Forever.minimapClickAction("LeftButton", 8, 0), "toggle")
+expect("a drag is not a click action", Forever.minimapClickAction("LeftButton", 9, 0), "none")
+expect("a diagonal drag is not a click action", Forever.minimapClickAction("LeftButton", 5, 5), "none")
+expect("right click opens the menu", Forever.minimapClickAction("RightButton", 0, 0), "menu")
+expect("right click does not toggle when it opens the menu", Forever.minimapClickAction("RightButton", 0, 0) == "toggle", false)
+expect("middle click does nothing", Forever.minimapClickAction("MiddleButton", 0, 0), "none")
+
+expect("escape closes the menu", Forever.minimapMenuDismiss("ESCAPE"), true)
+expect("an outside click closes the menu", Forever.minimapMenuDismiss("outside"), true)
+expect("enter does not close the menu", Forever.minimapMenuDismiss("ENTER"), false)
+expect("a left button name is not the outside signal", Forever.minimapMenuDismiss("LeftButton"), false)
+
+local menuLabels = {}
+for _, item in ipairs(Forever.menuItems()) do
+  menuLabels[#menuLabels + 1] = item.label
+  expect("menu " .. item.label .. " uses the slash method", Forever.dispatchMethod(item.token), item.method)
+end
+expect("menu starts with add note", menuLabels[1], "Add note…")
+expect("menu opens the journal", menuLabels[2], "Open/close journal")
+expect("menu runs compat", menuLabels[3], "Compat check")
+expect("menu shows help", menuLabels[4], "Help")
+expect("menu captures", menuLabels[5], "Capture…")
+expect("menu starts a session", menuLabels[6], "New session")
+expect("menu toggles debug", menuLabels[7], "Toggle debug")
+expect("menu length", #menuLabels, 7)
+
+local function menuLists(token)
+  for _, item in ipairs(Forever.menuItems()) do
+    if item.token == token then
+      return true
+    end
+  end
+  return false
+end
+
+expect("menu lists note", menuLists("note"), true)
+expect("menu lists the bare journal command", menuLists(""), true)
+expect("menu lists compat", menuLists("compat"), true)
+expect("menu lists help", menuLists("help"), true)
+expect("menu lists capture", menuLists("capture"), true)
+expect("menu lists reset", menuLists("reset"), true)
+expect("menu lists debug", menuLists("debug"), true)
+expect("menu omits wipe", menuLists("wipe"), false)
+expect("menu omits clear", menuLists("clear"), false)
+expect("menu omits undo", menuLists("undo"), false)
+
+expect("wipe stays a slash command", Forever.commandByToken("wipe").method, "WipeJournalData")
+expect("wipe is marked off the menu", Forever.commandByToken("wipe").menu, false)
+expect("clear stays a slash command", Forever.dispatchMethod("clear"), "ClearJournalSession")
+expect("undo stays a slash command", Forever.dispatchMethod("undo"), "UndoJournalEntry")
+expect("capture alias uses the capture dialog", Forever.dispatchMethod("capture-target"), "ShowTargetCaptureDialog")
+expect("bare slash toggles", Forever.dispatchMethod(""), "ToggleUI")
+expect("unknown slash text still toggles", Forever.dispatchMethod("nope"), "ToggleUI")
+expect("note slash opens the note dialog", Forever.dispatchMethod("note"), "ShowNoteCaptureDialog")
+
+local menuJournal = {
+  schemaVersion = 3,
+  sessions = {
+    {
+      characterKey = "Mira-Example Realm",
+      entries = {
+        { type = "death", msg = "Died.", seq = 1 },
+      },
+    },
+  },
+  settings = { minimapAngle = 225, afkNoteMinutes = 10 },
+}
+local menuSessions = menuJournal.sessions
+local menuEntries = menuJournal.sessions[1].entries
+Forever.menuItems()
+Forever.minimapClickAction("RightButton", 0, 0)
+Forever.minimapMenuDismiss("ESCAPE")
+expect("opening the menu keeps schema 3", menuJournal.schemaVersion, 3)
+expect("opening the menu keeps the sessions table", menuJournal.sessions, menuSessions)
+expect("opening the menu keeps the entries table", menuJournal.sessions[1].entries, menuEntries)
+expect("opening the menu adds no entry", #menuEntries, 1)
+expect("opening the menu keeps the death line", menuEntries[1].msg, "Died.")
+expect("opening the menu keeps the angle", menuJournal.settings.minimapAngle, 225)
+
+local function appendNote(db, text)
+  local entry = Forever.noteEntryData(text)
+  if not entry then
+    return nil
+  end
+  local stored = {
+    v = db.schemaVersion,
+    type = entry.type,
+    data = { text = entry.data.text },
+    msg = entry.msg,
+  }
+  db.sessions[1].entries[#db.sessions[1].entries + 1] = stored
+  return stored
+end
+
+expect("empty note saves nothing", appendNote(menuJournal, ""), nil)
+expect("whitespace note saves nothing", appendNote(menuJournal, " \t\n "), nil)
+expect("blank note leaves the death line alone", #menuEntries, 1)
+expect("nil note saves nothing", Forever.noteEntryData(nil), nil)
+
+local fromSlash = appendNote(menuJournal, "The north road is quiet.")
+local fromDialog = Forever.noteEntryData("The north road is quiet.")
+expect("dialog type matches /journal note", fromDialog.type, fromSlash.type)
+expect("dialog text matches /journal note", fromDialog.data.text, fromSlash.data.text)
+expect("dialog line matches /journal note", fromDialog.msg, fromSlash.msg)
+expect("saved line is the note text", fromSlash.msg, "Note: The north road is quiet.")
+expect("one note was added", #menuEntries, 2)
+expect("death line stays first", menuEntries[1].msg, "Died.")
+expect("schema stays 3 after the note", menuJournal.schemaVersion, 3)
+expect("still one session after the note", #menuJournal.sessions, 1)
+expect("sessions table stays the same object", menuJournal.sessions, menuSessions)
+expect("angle stays after the note", menuJournal.settings.minimapAngle, 225)
+expect("a padded note keeps its spaces", Forever.noteEntryData("  hello  ").data.text, "  hello  ")
+expect("database action still keeps the menu journal", Forever.databaseAction(menuJournal, 3), "keep")
 
 local function readFile(path)
   local handle = assert(io.open(path, "r"))
@@ -193,17 +309,53 @@ end
 
 local ui = readFile("JournalingAddon/JournalUI.lua")
 expect("slash command is still /journal", ui:find('SLASH_JOURNAL1 = "/journal"', 1, true) ~= nil, true)
-expect("slash note command stays", ui:find('arg == "note"', 1, true) ~= nil, true)
-expect("slash compat command stays", ui:find('arg == "compat"', 1, true) ~= nil, true)
-expect("slash wipe command stays", ui:find('arg == "wipe"', 1, true) ~= nil, true)
-expect("bare /journal still calls ToggleUI", ui:find("Journal:ToggleUI()", 1, true) ~= nil, true)
+expect("slash trims then dispatches", ui:find("Journal:DispatchJournalCommand(arg)", 1, true) ~= nil, true)
+expect("dispatch calls the shared method", ui:find("self[method](self)", 1, true) ~= nil, true)
+expect("help still lists note", ui:find("  /journal note - Add a note", 1, true) ~= nil, true)
+expect("help still lists compat", ui:find("  /journal compat - Print Forever client checks", 1, true) ~= nil, true)
+expect("help still lists wipe", ui:find("  /journal wipe - Wipe all journal data", 1, true) ~= nil, true)
+expect("bare /journal still calls ToggleUI", ui:find("function Journal:ToggleUI()", 1, true) ~= nil, true)
 
 local minimap = readFile("JournalingAddon/features/Minimap.lua")
-expect("minimap click uses the shared decision", minimap:find("minimapShouldToggle", 1, true) ~= nil, true)
+expect("minimap click uses the shared action", minimap:find("minimapClickAction", 1, true) ~= nil, true)
 expect("minimap click calls ToggleUI", minimap:find("Journal:ToggleUI()", 1, true) ~= nil, true)
+expect("minimap right click is registered", minimap:find('RegisterForClicks("LeftButtonUp", "RightButtonUp")', 1, true) ~= nil, true)
+expect("minimap menu uses the slash dispatch", minimap:find("Journal:DispatchJournalCommand(token)", 1, true) ~= nil, true)
+expect("minimap menu does not open the note dialog itself", minimap:find("ShowNoteCaptureDialog", 1, true) == nil, true)
+expect("minimap menu does not name wipe", minimap:find("wipe", 1, true) == nil, true)
+expect("minimap menu does not name Wipe", minimap:find("Wipe", 1, true) == nil, true)
+expect("escape is UISpecialFrames", minimap:find('table.insert(UISpecialFrames, "JournalMinimapMenu")', 1, true) ~= nil, true)
+expect("outside click uses the dismiss decision", minimap:find('minimapMenuDismiss("outside")', 1, true) ~= nil, true)
 expect("minimap does not register a combat log", minimap:find("COMBAT_LOG", 1, true) == nil, true)
 expect("minimap does not register events itself", minimap:find("RegisterEvent", 1, true) == nil, true)
 expect("minimap does not mention schema", minimap:find("schemaVersion", 1, true) == nil, true)
+
+local notes = readFile("JournalingAddon/features/Notes.lua")
+local shots = readFile("JournalingAddon/features/Screenshots.lua")
+local events = readFile("JournalingAddon/core/Events.lua")
+local owners = {
+  ToggleUI = ui,
+  ShowNoteCaptureDialog = notes,
+  ShowTargetCaptureDialog = shots,
+  ReportCompat = events,
+  ShowJournalHelp = ui,
+  ToggleJournalDebug = ui,
+  UndoJournalEntry = ui,
+  ClearJournalSession = ui,
+  ResetJournalSession = ui,
+  WipeJournalData = ui,
+}
+for _, command in ipairs(Forever.JOURNAL_COMMANDS) do
+  local owner = owners[command.method]
+  expect(
+    command.method .. " is the slash function",
+    owner:find("function Journal:" .. command.method .. "(", 1, true) ~= nil,
+    true
+  )
+end
+expect("note dialog save uses noteTextToSave", notes:find("noteTextToSave", 1, true) ~= nil, true)
+expect("capture note uses noteEntryData", notes:find("noteEntryData", 1, true) ~= nil, true)
+expect("note renderer still prefixes Note", notes:find('return "Note: " ..', 1, true) ~= nil, true)
 
 local storage = readFile("JournalingAddon/core/Storage.lua")
 local initStart = storage:find("function Journal:InitDB", 1, true)

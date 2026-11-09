@@ -15,7 +15,7 @@ Core (loaded first):
 - `JournalingAddon/core/Events.lua` (WoW events -> internal bus)
 
 Features (loaded after core):
-- `JournalingAddon/features/*.lua` (quest, travel, combat, screenshots, notes, minimap button, etc.)
+- `JournalingAddon/features/*.lua` (quest, travel, combat, screenshots, notes, minimap button and its command menu, etc.)
 
 UI (loaded last):
 - `JournalingAddon/JournalUI.lua`
