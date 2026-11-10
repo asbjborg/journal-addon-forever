@@ -422,104 +422,99 @@ function Journal:ToggleUI()
   end
 end
 
+function Journal:ToggleJournalDebug()
+  Journal.debug = not Journal.debug
+  local state = Journal.debug and "on" or "off"
+  if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
+    DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Journal:|r debug " .. state)
+  end
+end
+
+function Journal:UndoJournalEntry()
+  local removed = Journal:RemoveLastEntry()
+  if removed then
+    local msg = removed.msg or removed.text or "entry"
+    if DEFAULT_CHAT_FRAME then
+      DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Journal:|r Removed: " .. msg:sub(1, 50))
+    end
+    if Journal.uiFrame and Journal.uiFrame:IsShown() then
+      Journal:RefreshUI()
+    end
+  else
+    if DEFAULT_CHAT_FRAME then
+      DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Journal:|r No entries to remove.")
+    end
+  end
+end
+
+function Journal:ClearJournalSession()
+  local count = Journal:ClearCurrentSession()
+  if Journal.idleTimer then
+    Journal.idleTimer:Cancel()
+    Journal.idleTimer = nil
+  end
+  if Journal.hardCapTimer then
+    Journal.hardCapTimer:Cancel()
+    Journal.hardCapTimer = nil
+  end
+  if Journal.ResetActivityChunk then
+    Journal:ResetActivityChunk()
+  end
+  Journal:AddEvent("system", { message = "Entries cleared. Starting new session." })
+  if DEFAULT_CHAT_FRAME then
+    DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Journal:|r Cleared " .. count .. " entries from current session.")
+  end
+  if Journal.uiFrame and Journal.uiFrame:IsShown() then
+    Journal:RefreshUI()
+  end
+end
+
+function Journal:ResetJournalSession()
+  Journal:StartNewSession("Entries cleared. Starting new session.")
+  if Journal.uiFrame then
+    local sessions = Journal.db and Journal.db.sessions or {}
+    Journal.uiFrame.selectedSessionIndex = #sessions
+  end
+  if DEFAULT_CHAT_FRAME then
+    DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Journal:|r New session started.")
+  end
+  if Journal.uiFrame and Journal.uiFrame:IsShown() then
+    Journal:RefreshUI()
+  end
+end
+
+function Journal:WipeJournalData()
+  Journal:WipeAllData()
+  if DEFAULT_CHAT_FRAME then
+    DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Journal:|r Journal data wiped.")
+  end
+  if Journal.uiFrame and Journal.uiFrame:IsShown() then
+    Journal:RefreshUI()
+  end
+end
+
+function Journal:ShowJournalHelp()
+  if DEFAULT_CHAT_FRAME then
+    DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Journal commands:|r")
+    DEFAULT_CHAT_FRAME:AddMessage("  /journal - Toggle the journal (same as the minimap button)")
+    DEFAULT_CHAT_FRAME:AddMessage("  /journal capture - Screenshot + note dialog")
+    DEFAULT_CHAT_FRAME:AddMessage("  /journal note - Add a note")
+    DEFAULT_CHAT_FRAME:AddMessage("  /journal undo - Remove last entry")
+    DEFAULT_CHAT_FRAME:AddMessage("  /journal clear - Clear current session")
+    DEFAULT_CHAT_FRAME:AddMessage("  /journal reset - Start new session")
+    DEFAULT_CHAT_FRAME:AddMessage("  /journal compat - Print Forever client checks")
+    DEFAULT_CHAT_FRAME:AddMessage("  /journal debug - Toggle debug mode")
+    DEFAULT_CHAT_FRAME:AddMessage("  /journal wipe - Wipe all journal data")
+  end
+end
+
+function Journal:DispatchJournalCommand(token)
+  local method = Journal.Forever.dispatchMethod(token)
+  self[method](self)
+end
+
 SLASH_JOURNAL1 = "/journal"
 SlashCmdList["JOURNAL"] = function(msg)
   local arg = strlower((string.gsub(msg or "", "^%s*(.-)%s*$", "%1")))
-  if arg == "compat" then
-    Journal:ReportCompat()
-    return
-  elseif arg == "debug" then
-    Journal.debug = not Journal.debug
-    local state = Journal.debug and "on" or "off"
-    if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
-      DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Journal:|r debug " .. state)
-    end
-    return
-  elseif arg == "capture" or arg == "capture-target" then
-    Journal:ShowTargetCaptureDialog()
-    return
-  elseif arg == "note" then
-    Journal:ShowNoteCaptureDialog()
-    return
-  elseif arg == "undo" then
-    -- Delete last entry
-    local removed = Journal:RemoveLastEntry()
-    if removed then
-      local msg = removed.msg or removed.text or "entry"
-      if DEFAULT_CHAT_FRAME then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Journal:|r Removed: " .. msg:sub(1, 50))
-      end
-      if Journal.uiFrame and Journal.uiFrame:IsShown() then
-        Journal:RefreshUI()
-      end
-    else
-      if DEFAULT_CHAT_FRAME then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Journal:|r No entries to remove.")
-      end
-    end
-    return
-  elseif arg == "clear" then
-    -- Clear current session entries
-    local count = Journal:ClearCurrentSession()
-    -- Reset any in-flight activity chunk to avoid re-flushing cleared entries
-    if Journal.idleTimer then
-      Journal.idleTimer:Cancel()
-      Journal.idleTimer = nil
-    end
-    if Journal.hardCapTimer then
-      Journal.hardCapTimer:Cancel()
-      Journal.hardCapTimer = nil
-    end
-    if Journal.ResetActivityChunk then
-      Journal:ResetActivityChunk()
-    end
-    -- Add a system marker entry after clear
-    Journal:AddEvent("system", { message = "Entries cleared. Starting new session." })
-    if DEFAULT_CHAT_FRAME then
-      DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Journal:|r Cleared " .. count .. " entries from current session.")
-    end
-    if Journal.uiFrame and Journal.uiFrame:IsShown() then
-      Journal:RefreshUI()
-    end
-    return
-  elseif arg == "reset" then
-    -- Start fresh session (ends current, starts new)
-    Journal:StartNewSession("Entries cleared. Starting new session.")
-    if Journal.uiFrame then
-      local sessions = Journal.db and Journal.db.sessions or {}
-      Journal.uiFrame.selectedSessionIndex = #sessions
-    end
-    if DEFAULT_CHAT_FRAME then
-      DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Journal:|r New session started.")
-    end
-    if Journal.uiFrame and Journal.uiFrame:IsShown() then
-      Journal:RefreshUI()
-    end
-    return
-  elseif arg == "wipe" then
-    -- Wipe all data and start fresh session
-    Journal:WipeAllData()
-    if DEFAULT_CHAT_FRAME then
-      DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Journal:|r Journal data wiped.")
-    end
-    if Journal.uiFrame and Journal.uiFrame:IsShown() then
-      Journal:RefreshUI()
-    end
-    return
-  elseif arg == "help" then
-    if DEFAULT_CHAT_FRAME then
-      DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Journal commands:|r")
-      DEFAULT_CHAT_FRAME:AddMessage("  /journal - Toggle the journal (same as the minimap button)")
-      DEFAULT_CHAT_FRAME:AddMessage("  /journal capture - Screenshot + note dialog")
-      DEFAULT_CHAT_FRAME:AddMessage("  /journal note - Add a note")
-      DEFAULT_CHAT_FRAME:AddMessage("  /journal undo - Remove last entry")
-      DEFAULT_CHAT_FRAME:AddMessage("  /journal clear - Clear current session")
-      DEFAULT_CHAT_FRAME:AddMessage("  /journal reset - Start new session")
-      DEFAULT_CHAT_FRAME:AddMessage("  /journal compat - Print Forever client checks")
-      DEFAULT_CHAT_FRAME:AddMessage("  /journal debug - Toggle debug mode")
-      DEFAULT_CHAT_FRAME:AddMessage("  /journal wipe - Wipe all journal data")
-    end
-    return
-  end
-  Journal:ToggleUI()
+  Journal:DispatchJournalCommand(arg)
 end

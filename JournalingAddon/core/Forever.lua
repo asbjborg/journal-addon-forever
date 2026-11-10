@@ -246,8 +246,202 @@ function Forever.minimapShouldToggle(button, dx, dy)
   return true
 end
 
+-- "toggle" opens the journal, "menu" opens the command menu, "none" does neither.
+function Forever.minimapClickAction(button, dx, dy)
+  if Forever.minimapShouldToggle(button, dx, dy) then
+    return "toggle"
+  end
+  if button == "RightButton" then
+    return "menu"
+  end
+  return "none"
+end
+
 function Forever.minimapTooltip()
-  return "JournalingAddon", "Left-click to toggle the journal"
+  return "JournalingAddon", "Left-click to toggle the journal", "Right-click for commands"
+end
+
+-- LibDBIcon-1.0 minor 56 (the Questie copy). Mainline uses a 31 frame, a 50
+-- MiniMap-TrackingBorder at TOPLEFT, and an 18 icon at CENTER. The classic
+-- branch uses a 20 UI-Minimap-Background. The zoom highlight is drawn ADD.
+-- Pressed icons move 1px down-right. The 0.05 crop is that library's rest inset.
+Forever.MINIMAP_BUTTON_SIZE = 31
+Forever.MINIMAP_BORDER_SIZE = 50
+Forever.MINIMAP_BACKGROUND_SIZE = 20
+Forever.MINIMAP_ICON_SIZE = 18
+Forever.MINIMAP_ICON_NUDGE = 1
+Forever.MINIMAP_ICON_CROP = 0.05
+Forever.MINIMAP_HIGHLIGHT = "Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight"
+Forever.MINIMAP_BORDER = "Interface\\Minimap\\MiniMap-TrackingBorder"
+Forever.MINIMAP_BACKGROUND = "Interface\\Minimap\\UI-Minimap-Background"
+Forever.MINIMAP_ICON = "Interface\\Icons\\INV_Misc_Book_09"
+Forever.MINIMAP_MASK = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
+
+function Forever.setRegionTexture(region, path)
+  local ok, found = pcall(region.SetTexture, region, path)
+  if not ok or found == false then
+    pcall(region.Hide, region)
+    return false
+  end
+  return true
+end
+
+-- TempPortraitAlphaMask needs clamp-to-black or the circle edge repeats.
+-- A client that rejects the wrap arguments gets the plain path instead.
+function Forever.setMaskTexture(region, path)
+  local ok, found = pcall(region.SetTexture, region, path, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+  if ok and found ~= false then
+    return true
+  end
+  return Forever.setRegionTexture(region, path)
+end
+
+function Forever.applyMinimapHighlight(button)
+  local ok = pcall(button.SetHighlightTexture, button, Forever.MINIMAP_HIGHLIGHT, "ADD")
+  if not ok then
+    ok = pcall(button.SetHighlightTexture, button, Forever.MINIMAP_HIGHLIGHT)
+  end
+  if not ok then
+    return "skipped"
+  end
+  local got, highlight = pcall(button.GetHighlightTexture, button)
+  if got and highlight then
+    pcall(highlight.SetBlendMode, highlight, "ADD")
+  end
+  return "set"
+end
+
+function Forever.placeMinimapIcon(icon, pressed)
+  local x, y = 0, 0
+  if pressed then
+    x = Forever.MINIMAP_ICON_NUDGE
+    y = -Forever.MINIMAP_ICON_NUDGE
+  end
+  icon:ClearAllPoints()
+  icon:SetPoint("CENTER", x, y)
+end
+
+-- Mask when both calls succeed. A missing mask API or mask texture uses the crop.
+function Forever.applyMinimapIconShape(button, icon)
+  local created, mask = pcall(button.CreateMaskTexture, button)
+  if created and mask and Forever.setMaskTexture(mask, Forever.MINIMAP_MASK) then
+    pcall(mask.SetAllPoints, mask, icon)
+    local added = pcall(icon.AddMaskTexture, icon, mask)
+    if added then
+      icon.mask = mask
+      return "mask"
+    end
+  end
+  local crop = Forever.MINIMAP_ICON_CROP
+  pcall(icon.SetTexCoord, icon, crop, 1 - crop, crop, 1 - crop)
+  return "crop"
+end
+
+function Forever.applyMinimapButtonChrome(button)
+  button:SetSize(Forever.MINIMAP_BUTTON_SIZE, Forever.MINIMAP_BUTTON_SIZE)
+  Forever.applyMinimapHighlight(button)
+
+  local border = button:CreateTexture(nil, "OVERLAY")
+  border:SetSize(Forever.MINIMAP_BORDER_SIZE, Forever.MINIMAP_BORDER_SIZE)
+  border:SetPoint("TOPLEFT", 0, 0)
+  Forever.setRegionTexture(border, Forever.MINIMAP_BORDER)
+  button.border = border
+
+  local background = button:CreateTexture(nil, "BACKGROUND")
+  background:SetSize(Forever.MINIMAP_BACKGROUND_SIZE, Forever.MINIMAP_BACKGROUND_SIZE)
+  background:SetPoint("CENTER", 0, 0)
+  Forever.setRegionTexture(background, Forever.MINIMAP_BACKGROUND)
+  button.background = background
+
+  local icon = button:CreateTexture(nil, "ARTWORK")
+  icon:SetSize(Forever.MINIMAP_ICON_SIZE, Forever.MINIMAP_ICON_SIZE)
+  Forever.setRegionTexture(icon, Forever.MINIMAP_ICON)
+  Forever.placeMinimapIcon(icon, false)
+  button.icon = icon
+  Forever.applyMinimapIconShape(button, icon)
+  return button
+end
+
+-- Slash tokens and the minimap menu share this list.
+-- menu = false for commands that delete an entry, clear a session, or wipe the database.
+-- The bare /journal command is the empty token.
+Forever.JOURNAL_COMMANDS = {
+  { token = "note", label = "Add note…", menu = true, method = "ShowNoteCaptureDialog" },
+  { token = "", label = "Open/close journal", menu = true, method = "ToggleUI" },
+  { token = "compat", label = "Compat check", menu = true, method = "ReportCompat" },
+  { token = "help", label = "Help", menu = true, method = "ShowJournalHelp" },
+  { token = "capture", label = "Capture…", menu = true, method = "ShowTargetCaptureDialog" },
+  { token = "reset", label = "New session", menu = true, method = "ResetJournalSession" },
+  { token = "debug", label = "Toggle debug", menu = true, method = "ToggleJournalDebug" },
+  { token = "undo", label = "Undo last entry", menu = false, method = "UndoJournalEntry" },
+  { token = "clear", label = "Clear session", menu = false, method = "ClearJournalSession" },
+  { token = "wipe", label = "Wipe journal", menu = false, method = "WipeJournalData" },
+}
+
+local JOURNAL_ALIASES = {
+  ["capture-target"] = "capture",
+}
+
+function Forever.commandByToken(token)
+  local aliased = JOURNAL_ALIASES[token]
+  if aliased then
+    token = aliased
+  end
+  for _, command in ipairs(Forever.JOURNAL_COMMANDS) do
+    if command.token == token then
+      return command
+    end
+  end
+  return nil
+end
+
+-- Unknown text does what a bare /journal does.
+function Forever.dispatchMethod(token)
+  local command = Forever.commandByToken(token)
+  if command then
+    return command.method
+  end
+  return Forever.commandByToken("").method
+end
+
+function Forever.menuItems()
+  local items = {}
+  for _, command in ipairs(Forever.JOURNAL_COMMANDS) do
+    if command.menu then
+      items[#items + 1] = command
+    end
+  end
+  return items
+end
+
+-- Escape is the key name UISpecialFrames already handles.
+-- "outside" is a click that missed both the menu and the minimap button.
+function Forever.minimapMenuDismiss(signal)
+  return signal == "ESCAPE" or signal == "outside"
+end
+
+-- Blank and whitespace-only notes are not entries.
+-- Text that contains a visible character is stored unchanged.
+function Forever.noteTextToSave(text)
+  if type(text) ~= "string" then
+    return nil
+  end
+  if text:find("%S") == nil then
+    return nil
+  end
+  return text
+end
+
+function Forever.noteEntryData(text)
+  local save = Forever.noteTextToSave(text)
+  if not save then
+    return nil
+  end
+  return {
+    type = "note",
+    data = { text = save },
+    msg = "Note: " .. save,
+  }
 end
 
 if type(Journal) == "table" then

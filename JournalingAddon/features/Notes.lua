@@ -2,13 +2,12 @@ local _, Journal = ...
 Journal = Journal or _G.Journal or {}
 
 function Journal:CaptureNote(note)
-  if not note or note == "" then
+  local entry = Journal.Forever.noteEntryData(note)
+  if not entry then
     return
   end
 
-  self:AddEvent("note", {
-    text = note,
-  })
+  self:AddEvent(entry.type, entry.data)
 end
 
 function Journal:ShowNoteCaptureDialog()
@@ -58,12 +57,12 @@ function Journal:CreateNoteCaptureDialog()
   saveButton:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 10)
   saveButton:SetText("Save")
   saveButton:SetScript("OnClick", function()
-    local note = editBox:GetText()
-    if note and note ~= "" then
+    local save = Journal.Forever.noteTextToSave(editBox:GetText())
+    if save then
       if frame.onSave then
-        frame.onSave(note)
+        frame.onSave(save)
       else
-        Journal:CaptureNote(note)
+        Journal:CaptureNote(save)
       end
     end
     frame:Hide()

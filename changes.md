@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.6.36] - 2026-11-10
+
+### Changed
+
+- **Minimap button shape** (Refs #8)
+  - The book button is drawn like the usual round minimap button: a 31×31 frame, the gold tracking border, the zoom highlight, and a centred icon
+  - A circular mask is used when the client can make one. Otherwise the icon is cropped
+  - A texture path that is missing is skipped and does not raise a Lua error
+  - Left-click, right-click, tooltip, drag, and the saved angle are unchanged
+  - Schema stays 3
+
+## [0.6.35] - 2026-11-09
+
+### Added
+
+- **Minimap command menu** (#6)
+  - Right-click opens a menu. Left-click still toggles the journal, and dragging the button is unchanged
+  - Add note… opens the same dialog as `/journal note`. Empty or whitespace-only text saves nothing. Any other text is stored unchanged, the same entry that dialog already saved
+  - Open/close journal, Capture…, Compat check, Help, New session, and Toggle debug call the same functions as those slash commands
+  - Undo, clear, and wipe stay on `/journal` only. They delete an entry, clear a session, or wipe the database
+  - Escape, or a click that misses the menu and the minimap button, closes the menu
+  - The tooltip names the left-click and the right-click
+  - Schema stays 3. Opening the menu does not write sessions or settings
+
 ## [0.6.34] - 2026-11-08
 
 ### Added
