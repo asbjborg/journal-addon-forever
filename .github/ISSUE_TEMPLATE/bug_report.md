@@ -21,8 +21,8 @@ assignees: ''
 <!-- What actually happened -->
 
 ## Environment
-- WoW Version: <!-- e.g., TBC Classic 2.5.5 -->
-- Interface Version: <!-- e.g., 20505 -->
+- WoW Version: <!-- e.g., Forever 1.60.x -->
+- Interface Version: <!-- e.g., 16001 -->
 - Character/Realm: <!-- Optional, but helpful -->
 - Addon Version: <!-- From JournalingAddon.toc -->
 

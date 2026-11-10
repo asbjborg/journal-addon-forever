@@ -41,7 +41,7 @@ async function main() {
     { step: readFile, params: config },
     { step: parseJsonl },
     { step: collectQuestIds },
-    { step: fetchWowheadQuests, params: { baseUrl: 'https://www.wowhead.com/tbc/quest=' } },
+    { step: fetchWowheadQuests, params: { baseUrl: process.env.WOWHEAD_QUEST_BASE_URL || '' } },
     { step: enrichJsonl },
   ];
 

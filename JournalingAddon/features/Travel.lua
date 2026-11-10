@@ -508,29 +508,30 @@ Journal.On("PLAYER_ENTERING_WORLD", function()
 end)
 
 function Journal:IsHearthSpell(spellName, spellId)
-  if not spellName or spellName == "" then
-    return false
+  if Journal.Forever.isHearthSpellId(spellId) then
+    return true
   end
-  local getSpellInfo = rawget(_G, "GetSpellInfo")
-  local hearthIds = { 8690, 556 }
-  for _, id in ipairs(hearthIds) do
-    local name = getSpellInfo and getSpellInfo(id)
-    if name and spellName == name then
-      return true
-    end
-    if spellId and spellId == id then
-      return true
+  local resolvedName = nil
+  if type(spellId) == "number" and C_Spell and type(C_Spell.GetSpellInfo) == "function" then
+    local ok, info = pcall(C_Spell.GetSpellInfo, spellId)
+    if ok then
+      resolvedName = Journal.Forever.spellInfoName(info)
     end
   end
-  local hearthNames = {
-    "Hearthstone",
-    "Innkeeper's Daughter",
-    "Astral Recall",
-    "Home",
-  }
-  for _, name in ipairs(hearthNames) do
-    if spellName:find(name, 1, true) then
+  if type(spellName) == "string" and spellName ~= "" then
+    if resolvedName and spellName == resolvedName then
       return true
+    end
+    local hearthNames = {
+      "Hearthstone",
+      "Innkeeper's Daughter",
+      "Astral Recall",
+      "Home",
+    }
+    for _, name in ipairs(hearthNames) do
+      if spellName:find(name, 1, true) then
+        return true
+      end
     end
   end
   return false
@@ -564,10 +565,15 @@ Journal.On("UNIT_SPELLCAST_SUCCEEDED", function(unit, spellName, ...)
   end
 end)
 
-hooksecurefunc("TakeTaxiNode", function(index)
-  if not Journal.flightState.onTaxi then
-    Journal:CaptureTaxiOrigin()
-    Journal:CaptureTaxiDestination(index)
-    Journal:HandleFlightStart()
-  end
-end)
+if type(hooksecurefunc) == "function" and type(TakeTaxiNode) == "function" then
+  hooksecurefunc("TakeTaxiNode", function(index)
+    if not Journal.flightState.onTaxi then
+      Journal:CaptureTaxiOrigin()
+      Journal:CaptureTaxiDestination(index)
+      Journal:HandleFlightStart()
+    end
+  end)
+  Journal.taxiHookStatus = "hooked"
+else
+  Journal.taxiHookStatus = "TakeTaxiNode missing"
+end

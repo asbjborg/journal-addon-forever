@@ -55,7 +55,8 @@ function Journal:ShowTargetCaptureDialog()
   }
 
   if UnitExists("target") then
-    local name = UnitName("target")
+    local given, surname = UnitName("target")
+    local name = Journal.Forever.displayName(given, surname, nil)
     if name and name ~= "" then
       local level = UnitLevel("target")
       if level and level <= 0 then

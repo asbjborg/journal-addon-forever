@@ -1,0 +1,4 @@
+{"v":3,"ts":"2026-11-06T18:00:00","seq":1,"type":"system","data":{"message":"Session started."},"msg":"Session started."}
+{"v":3,"ts":"2026-11-06T18:02:10","seq":2,"type":"quest","data":{"action":"accepted","questID":900001,"title":"Speak with the miller","zone":"Example Meadow","subZone":"North Mill"},"msg":"Accepted: Speak with the miller (900001)"}
+{"v":3,"ts":"2026-11-06T18:03:00","seq":3,"type":"note","data":{"text":"The north road past the mill is empty of carts."},"msg":"Note: The north road past the mill is empty of carts."}
+{"v":3,"ts":"2026-11-06T18:04:20","seq":4,"type":"activity","data":{"target":"Road Wolf","count":1,"xp":40},"msg":"Killed: Road Wolf | Gained 40 XP"}

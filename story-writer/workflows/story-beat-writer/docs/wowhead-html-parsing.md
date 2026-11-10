@@ -1,5 +1,7 @@
 # Parsing Wowhead quest HTML
 
+This note describes cached Burning Crusade quest HTML. The Forever workflow does not fetch `https://www.wowhead.com/tbc/quest=`. Pointing that catalog at Forever quest ids would label them with the wrong text. See `story-writer/README.md`.
+
 Wowhead quest pages (e.g. `https://www.wowhead.com/tbc/quest=570/...`) embed structured data in the HTML. This doc describes where to find each field so we can parse them in the story-writer workflow (or elsewhere) without a browser.
 
 ## Data sources (in order of use)

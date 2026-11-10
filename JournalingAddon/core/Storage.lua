@@ -21,12 +21,17 @@ function Journal:ResetDatabase(keepBackup)
 end
 
 function Journal:InitDB()
-  if not JournalDB or JournalDB.schemaVersion ~= CURRENT_SCHEMA then
-    self:ResetDatabase(self.debug)
+  -- v3 journals stay. A schema number difference must not call ResetDatabase.
+  local action = Journal.Forever.databaseAction(JournalDB, CURRENT_SCHEMA)
+  if action == "create" then
+    JournalDB = {
+      schemaVersion = CURRENT_SCHEMA,
+      sessions = {},
+    }
   else
-    JournalDB.sessions = JournalDB.sessions or {}
-    self.db = JournalDB
+    JournalDB.schemaVersion = CURRENT_SCHEMA
   end
+  self.db = JournalDB
   JournalDB.settings = JournalDB.settings or {}
   if JournalDB.settings.afkNoteMinutes == nil then
     JournalDB.settings.afkNoteMinutes = 10
@@ -110,12 +115,9 @@ function Journal:InitState()
 end
 
 function Journal:GetCharacterKey()
-  local name = UnitName("player")
+  local given, surname = UnitName("player")
   local realm = GetRealmName()
-  if name and realm and realm ~= "" then
-    return name .. "-" .. realm
-  end
-  return name or "Unknown"
+  return Journal.Forever.characterKey(given, surname, realm)
 end
 
 function Journal:GetDayKey()

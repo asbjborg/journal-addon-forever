@@ -3,22 +3,21 @@ alwaysApply: true
 ---
 # Overview
 
-Agents must always run `deploy.sh` after making any changes to the addon inside the JournalingAddon folder. This ensures all updates are correctly synchronized to the World of Warcraft AddOns folder for testing and use. No change to the addon is considered deployed until `deploy.sh` has been executed successfully. Run `deploy.sh` when you switch to a branch you are about to test in-game, so WoW runs that branch's code.
+Do not run `deploy.sh`. It refuses to copy files. The old anniversary `rsync --delete` install is gone. Install by hand, without deleting other addons, using `docs/FOREVER.md`. Do not install onto a machine from this repository's automation.
 
 ## Workflow
 
-**On main (no branch):** If the change is in JournalingAddon/, use a versioned section at the top of changes.md and bump .toc (no [TBD]). If the change is repo-only (rules, docs, CONTRIBUTING, etc.), no version bump or changelog unless you are documenting in changes.md. Run `deploy.sh` only when addon files changed.
+**On main (no branch):** If the change is in JournalingAddon/, use a versioned section at the top of changes.md and bump both TOC files together (no [TBD]). If the change is repo-only (rules, docs, CONTRIBUTING, etc.), no version bump or changelog unless you are documenting in changes.md. Do not run `deploy.sh`.
 
 **On a feature branch (before merge):**
 
-- Add or update the **single** draft changelog section at the top: `## [TBD] – <branch-name>` (e.g. `## [TBD] – issue-59-death-hardcut`) with the change description; no version or date yet.
-- Set `JournalingAddon/JournalingAddon.toc` **Version** to **dev-** plus the branch name (e.g. `dev-issue-59-death-hardcut`) so branch deployments are clearly marked in-game.
-- Run `deploy.sh`. No requirement that .toc and a versioned changelog heading match until merge.
+- Keep `JournalingAddon.toc` and `JournalingAddon_Camelot.toc` on the same file list and the same Version.
+- Do not run `deploy.sh`.
 
-**At merge (final deploy):**
+**At merge:**
 
-- Version in `.toc` and the changelog heading in `changes.md` must match the final release (main's top version + 1). Replace `[TBD]` with `[X.Y.Z] - <release date>` (release date = date of merge).
+- Version in both TOC files and the changelog heading in `changes.md` must match.
 
-**Deploy BEFORE commit and close** - Always deploy changes first and wait for user testing before committing or closing issues. See `.cursor/rules/workflow.mdc` for complete workflow guidelines.
+Do not install the addon from automation, and do not wait on a local WoW client before committing a port change. Live checks are listed in `docs/FOREVER.md` and stay open until a person runs them.
 
-Changes to the repository itself outside the JournalingAddon folder (e.g. .cursor/rules/, .gitignore, etc.) should not require a deploy.
+Changes to the repository itself outside the JournalingAddon folder (e.g. .cursor/rules/, .gitignore, etc.) should not require a copy into the game.

@@ -11,7 +11,7 @@ Agents must follow this workflow when working on issues: one issue per branch; o
 
    **If working on main** (hotfix, repo-level work, small test file, rule change, or any change that doesn't warrant a branch): no [TBD], no branch. If it's an **addon change** (JournalingAddon/), bump version and add a versioned section at the top of changes.md. If it's **repo-only** (rules, docs, CONTRIBUTING, .gitmessage, test files, etc.), no version bump or changelog unless you are documenting the change in changes.md.
 
-3. **Deploy** - Run `deploy.sh` after addon changes and when switching to a branch you want to test in-game. On the branch: add a **single** draft changelog section at the top with placeholder `## [TBD] – <branch-name>` (e.g. `## [TBD] – issue-59-death-hardcut`); set `.toc` **Version** to **dev-** plus the branch name (e.g. `dev-issue-59-death-hardcut`) so branch deployments are clearly marked in-game. (WoW .toc Version accepts any string.) Real version and date are **finalized at merge**, not when deploying.
+3. **Install** - Do not run `deploy.sh`. Copy `JournalingAddon` by hand when a person is ready to smoke-test on WoW Forever. See `docs/FOREVER.md`. Never use `rsync --delete`. On a branch before merge, a draft changelog section `## [TBD] – <branch-name>` is still fine; the Forever port itself uses a real version because the in-game check looks for it.
 
 4. **Test** - Wait for user to test before proceeding.
 
@@ -33,7 +33,7 @@ When your branch is ready to merge to main:
 
 - **One issue per branch** - Work on multiple issues by using separate branches; only one merge at a time (version = main's top + 1 at merge).
 - **Deploy before commit** - Deploy and test before committing.
-- **No premature commits** - Never commit or close issues before deployment and testing.
+- **No closing upstream issues from this repo.** Static tests in this repo are not a live WoW check. Do not install the addon from automation.
 - **Wait for approval** - Wait for user confirmation after each step before proceeding.
 
 ## Workflow Exception

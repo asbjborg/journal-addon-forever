@@ -36,7 +36,7 @@ When a user requests an issue to be closed, follow the branch-based workflow fro
 
 ## 4) Deploy after merge
 
-- run `./deploy.sh` on `main` after the merge (addon changes only)
+- do not run `./deploy.sh` after the merge. Installation is a manual copy described in `docs/FOREVER.md`.
 
 ## 5) Close the issue
 
