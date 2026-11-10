@@ -509,7 +509,7 @@ SlashCmdList["JOURNAL"] = function(msg)
   elseif arg == "help" then
     if DEFAULT_CHAT_FRAME then
       DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Journal commands:|r")
-      DEFAULT_CHAT_FRAME:AddMessage("  /journal - Toggle UI")
+      DEFAULT_CHAT_FRAME:AddMessage("  /journal - Toggle the journal (same as the minimap button)")
       DEFAULT_CHAT_FRAME:AddMessage("  /journal capture - Screenshot + note dialog")
       DEFAULT_CHAT_FRAME:AddMessage("  /journal note - Add a note")
       DEFAULT_CHAT_FRAME:AddMessage("  /journal undo - Remove last entry")

@@ -3,7 +3,7 @@
 ## Title: JournalingAddon
 ## Notes: Session-based journal log for WoW Forever.
 ## Author: asbjborg
-## Version: 0.6.33
+## Version: 0.6.34
 ## SavedVariables: JournalDB
 ## X-Game: forever
 
@@ -24,4 +24,5 @@ features/Screenshots.lua
 features/Notes.lua
 features/Level.lua
 features/Profession.lua
+features/Minimap.lua
 JournalUI.lua
