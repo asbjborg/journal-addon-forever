@@ -134,18 +134,11 @@ function Journal:InitMinimapButton()
   end
 
   local button = CreateFrame("Button", "JournalingAddonMinimapButton", Minimap)
-  button:SetSize(31, 31)
   button:SetFrameStrata("MEDIUM")
   button:SetFrameLevel(Minimap:GetFrameLevel() + 5)
   button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   button:RegisterForDrag("LeftButton")
-  button:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square")
-
-  local icon = button:CreateTexture(nil, "BACKGROUND")
-  icon:SetTexture("Interface\\Icons\\INV_Misc_Book_09")
-  icon:SetAllPoints()
-  icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-  button.icon = icon
+  Journal.Forever.applyMinimapButtonChrome(button)
 
   button:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
@@ -161,6 +154,10 @@ function Journal:InitMinimapButton()
 
   button:SetScript("OnMouseDown", function(self)
     self.downX, self.downY = GetCursorPosition()
+    Journal.Forever.placeMinimapIcon(self.icon, true)
+  end)
+  button:SetScript("OnMouseUp", function(self)
+    Journal.Forever.placeMinimapIcon(self.icon, false)
   end)
   button:SetScript("OnClick", function(self, mouseButton)
     local x, y = GetCursorPosition()
@@ -186,6 +183,7 @@ function Journal:InitMinimapButton()
     self:SetScript("OnUpdate", nil)
     Journal:PlaceMinimapButton(Journal:MinimapCursorAngle())
     Journal.Forever.storeMinimapAngle(JournalDB, self.angle)
+    Journal.Forever.placeMinimapIcon(self.icon, false)
   end)
 
   self.minimapButton = button

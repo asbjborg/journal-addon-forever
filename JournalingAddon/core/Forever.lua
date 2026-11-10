@@ -261,6 +261,107 @@ function Forever.minimapTooltip()
   return "JournalingAddon", "Left-click to toggle the journal", "Right-click for commands"
 end
 
+-- LibDBIcon-1.0 minor 56 (the Questie copy). Mainline uses a 31 frame, a 50
+-- MiniMap-TrackingBorder at TOPLEFT, and an 18 icon at CENTER. The classic
+-- branch uses a 20 UI-Minimap-Background. The zoom highlight is drawn ADD.
+-- Pressed icons move 1px down-right. The 0.05 crop is that library's rest inset.
+Forever.MINIMAP_BUTTON_SIZE = 31
+Forever.MINIMAP_BORDER_SIZE = 50
+Forever.MINIMAP_BACKGROUND_SIZE = 20
+Forever.MINIMAP_ICON_SIZE = 18
+Forever.MINIMAP_ICON_NUDGE = 1
+Forever.MINIMAP_ICON_CROP = 0.05
+Forever.MINIMAP_HIGHLIGHT = "Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight"
+Forever.MINIMAP_BORDER = "Interface\\Minimap\\MiniMap-TrackingBorder"
+Forever.MINIMAP_BACKGROUND = "Interface\\Minimap\\UI-Minimap-Background"
+Forever.MINIMAP_ICON = "Interface\\Icons\\INV_Misc_Book_09"
+Forever.MINIMAP_MASK = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
+
+function Forever.setRegionTexture(region, path)
+  local ok, found = pcall(region.SetTexture, region, path)
+  if not ok or found == false then
+    pcall(region.Hide, region)
+    return false
+  end
+  return true
+end
+
+-- TempPortraitAlphaMask needs clamp-to-black or the circle edge repeats.
+-- A client that rejects the wrap arguments gets the plain path instead.
+function Forever.setMaskTexture(region, path)
+  local ok, found = pcall(region.SetTexture, region, path, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+  if ok and found ~= false then
+    return true
+  end
+  return Forever.setRegionTexture(region, path)
+end
+
+function Forever.applyMinimapHighlight(button)
+  local ok = pcall(button.SetHighlightTexture, button, Forever.MINIMAP_HIGHLIGHT, "ADD")
+  if not ok then
+    ok = pcall(button.SetHighlightTexture, button, Forever.MINIMAP_HIGHLIGHT)
+  end
+  if not ok then
+    return "skipped"
+  end
+  local got, highlight = pcall(button.GetHighlightTexture, button)
+  if got and highlight then
+    pcall(highlight.SetBlendMode, highlight, "ADD")
+  end
+  return "set"
+end
+
+function Forever.placeMinimapIcon(icon, pressed)
+  local x, y = 0, 0
+  if pressed then
+    x = Forever.MINIMAP_ICON_NUDGE
+    y = -Forever.MINIMAP_ICON_NUDGE
+  end
+  icon:ClearAllPoints()
+  icon:SetPoint("CENTER", x, y)
+end
+
+-- Mask when both calls succeed. A missing mask API or mask texture uses the crop.
+function Forever.applyMinimapIconShape(button, icon)
+  local created, mask = pcall(button.CreateMaskTexture, button)
+  if created and mask and Forever.setMaskTexture(mask, Forever.MINIMAP_MASK) then
+    pcall(mask.SetAllPoints, mask, icon)
+    local added = pcall(icon.AddMaskTexture, icon, mask)
+    if added then
+      icon.mask = mask
+      return "mask"
+    end
+  end
+  local crop = Forever.MINIMAP_ICON_CROP
+  pcall(icon.SetTexCoord, icon, crop, 1 - crop, crop, 1 - crop)
+  return "crop"
+end
+
+function Forever.applyMinimapButtonChrome(button)
+  button:SetSize(Forever.MINIMAP_BUTTON_SIZE, Forever.MINIMAP_BUTTON_SIZE)
+  Forever.applyMinimapHighlight(button)
+
+  local border = button:CreateTexture(nil, "OVERLAY")
+  border:SetSize(Forever.MINIMAP_BORDER_SIZE, Forever.MINIMAP_BORDER_SIZE)
+  border:SetPoint("TOPLEFT", 0, 0)
+  Forever.setRegionTexture(border, Forever.MINIMAP_BORDER)
+  button.border = border
+
+  local background = button:CreateTexture(nil, "BACKGROUND")
+  background:SetSize(Forever.MINIMAP_BACKGROUND_SIZE, Forever.MINIMAP_BACKGROUND_SIZE)
+  background:SetPoint("CENTER", 0, 0)
+  Forever.setRegionTexture(background, Forever.MINIMAP_BACKGROUND)
+  button.background = background
+
+  local icon = button:CreateTexture(nil, "ARTWORK")
+  icon:SetSize(Forever.MINIMAP_ICON_SIZE, Forever.MINIMAP_ICON_SIZE)
+  Forever.setRegionTexture(icon, Forever.MINIMAP_ICON)
+  Forever.placeMinimapIcon(icon, false)
+  button.icon = icon
+  Forever.applyMinimapIconShape(button, icon)
+  return button
+end
+
 -- Slash tokens and the minimap menu share this list.
 -- menu = false for commands that delete an entry, clear a session, or wipe the database.
 -- The bare /journal command is the empty token.

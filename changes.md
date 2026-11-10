@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.36] - 2026-11-10
+
+### Changed
+
+- **Minimap button shape** (Refs #8)
+  - The book button is drawn like the usual round minimap button: a 31×31 frame, the gold tracking border, the zoom highlight, and a centred icon
+  - A circular mask is used when the client can make one. Otherwise the icon is cropped
+  - A texture path that is missing is skipped and does not raise a Lua error
+  - Left-click, right-click, tooltip, drag, and the saved angle are unchanged
+  - Schema stays 3
+
 ## [0.6.35] - 2026-11-09
 
 ### Added

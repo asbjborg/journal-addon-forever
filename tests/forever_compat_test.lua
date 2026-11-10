@@ -329,6 +329,266 @@ expect("outside click uses the dismiss decision", minimap:find('minimapMenuDismi
 expect("minimap does not register a combat log", minimap:find("COMBAT_LOG", 1, true) == nil, true)
 expect("minimap does not register events itself", minimap:find("RegisterEvent", 1, true) == nil, true)
 expect("minimap does not mention schema", minimap:find("schemaVersion", 1, true) == nil, true)
+expect("square highlight is gone", minimap:find("ButtonHilight-Square", 1, true) == nil, true)
+expect("minimap draws the round chrome", minimap:find("applyMinimapButtonChrome", 1, true) ~= nil, true)
+expect("press nudges the icon", minimap:find("placeMinimapIcon(self.icon, true)", 1, true) ~= nil, true)
+expect("release restores the icon", minimap:find('OnMouseUp", function(self)\n    Journal.Forever.placeMinimapIcon(self.icon, false)', 1, true) ~= nil, true)
+local dragStopAt = minimap:find('button:SetScript("OnDragStop"', 1, true)
+local dragStopChunk = minimap:sub(dragStopAt, dragStopAt + 280)
+expect("drag stop restores the icon", dragStopChunk:find("placeMinimapIcon(self.icon, false)", 1, true) ~= nil, true)
+expect("drag still stores the angle", dragStopChunk:find("storeMinimapAngle(JournalDB, self.angle)", 1, true) ~= nil, true)
+expect("drag is still registered", minimap:find('RegisterForDrag("LeftButton")', 1, true) ~= nil, true)
+
+local function fakeRegion(failPaths, options)
+  local region = { anchor = {}, hidden = false }
+  function region:SetSize(w, h)
+    self.w = w
+    self.h = h
+  end
+  function region:SetPoint(point, x, y)
+    self.anchor = { point, x, y }
+  end
+  function region:ClearAllPoints()
+    self.anchor = {}
+  end
+  function region:SetTexture(path, horizWrap, vertWrap)
+    if horizWrap ~= nil and options.rejectWrap then
+      error("wrap rejected")
+    end
+    local failure = failPaths[path]
+    if failure == "error" then
+      error("missing texture " .. path)
+    end
+    if failure == "false" then
+      return false
+    end
+    self.path = path
+    self.wrap = { horizWrap, vertWrap }
+    return true
+  end
+  function region:Hide()
+    self.hidden = true
+  end
+  function region:SetAllPoints(other)
+    self.allPoints = other
+  end
+  function region:SetTexCoord(left, right, top, bottom)
+    self.coord = { left, right, top, bottom }
+  end
+  function region:AddMaskTexture(mask)
+    self.appliedMask = mask
+  end
+  function region:SetBlendMode(mode)
+    self.blend = mode
+  end
+  return region
+end
+
+local function regionByLayer(button, layer)
+  for _, region in ipairs(button.regions) do
+    if region.layer == layer then
+      return region
+    end
+  end
+  return nil
+end
+
+local function fakeButton(options)
+  local button = { regions = {} }
+  function button:SetSize(w, h)
+    self.w = w
+    self.h = h
+  end
+  function button:SetHighlightTexture(path, blend)
+    if options.rejectBlend and blend ~= nil then
+      error("blend rejected")
+    end
+    if options.highlightError then
+      error("missing highlight")
+    end
+    self.highlightPath = path
+    self.highlightBlend = blend
+    self.highlight = fakeRegion(options.failPaths, options)
+    self.highlight.path = path
+  end
+  function button:GetHighlightTexture()
+    return self.highlight
+  end
+  function button:CreateTexture(_, layer)
+    local created = fakeRegion(options.failPaths, options)
+    created.layer = layer
+    self.regions[#self.regions + 1] = created
+    return created
+  end
+  if options.maskApi then
+    function button:CreateMaskTexture()
+      return fakeRegion(options.failPaths, options)
+    end
+  end
+  return button
+end
+
+local function applyChrome(options)
+  local button = fakeButton(options)
+  local ok, err = pcall(Forever.applyMinimapButtonChrome, button)
+  return ok, err, button
+end
+
+expect("highlight path", Forever.MINIMAP_HIGHLIGHT, "Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+expect("border path", Forever.MINIMAP_BORDER, "Interface\\Minimap\\MiniMap-TrackingBorder")
+expect("background path", Forever.MINIMAP_BACKGROUND, "Interface\\Minimap\\UI-Minimap-Background")
+expect("icon path", Forever.MINIMAP_ICON, "Interface\\Icons\\INV_Misc_Book_09")
+expect("mask path", Forever.MINIMAP_MASK, "Interface\\CharacterFrame\\TempPortraitAlphaMask")
+
+local maskOk, maskErr, masked = applyChrome({ maskApi = true, failPaths = {} })
+expect("mask setup does not raise", maskOk, true)
+if not maskOk then
+  io.stderr:write(tostring(maskErr) .. "\n")
+end
+expect("frame is 31", masked.w, 31)
+expect("frame height is 31", masked.h, 31)
+expect("highlight is the zoom texture", masked.highlightPath, Forever.MINIMAP_HIGHLIGHT)
+expect("highlight argument is ADD", masked.highlightBlend, "ADD")
+expect("highlight blend is ADD", masked.highlight.blend, "ADD")
+local border = regionByLayer(masked, "OVERLAY")
+local background = regionByLayer(masked, "BACKGROUND")
+local icon = regionByLayer(masked, "ARTWORK")
+expect("border layer exists", border ~= nil, true)
+expect("border is 50", border.w, 50)
+expect("border height is 50", border.h, 50)
+expect("border anchors TOPLEFT", border.anchor[1], "TOPLEFT")
+expect("border x is 0", border.anchor[2], 0)
+expect("border y is 0", border.anchor[3], 0)
+expect("border texture", border.path, Forever.MINIMAP_BORDER)
+expect("border stays shown", border.hidden, false)
+expect("background is 20", background.w, 20)
+expect("background height is 20", background.h, 20)
+expect("background anchors CENTER", background.anchor[1], "CENTER")
+expect("background texture", background.path, Forever.MINIMAP_BACKGROUND)
+expect("icon is 18", icon.w, 18)
+expect("icon height is 18", icon.h, 18)
+expect("icon anchors CENTER", icon.anchor[1], "CENTER")
+expect("icon rest x is 0", icon.anchor[2], 0)
+expect("icon rest y is 0", icon.anchor[3], 0)
+expect("icon texture", icon.path, Forever.MINIMAP_ICON)
+expect("mask was applied", icon.appliedMask ~= nil, true)
+expect("mask covers the icon", icon.appliedMask.allPoints, icon)
+expect("mask texture", icon.appliedMask.path, Forever.MINIMAP_MASK)
+expect("mask clamps horizontally", icon.appliedMask.wrap[1], "CLAMPTOBLACKADDITIVE")
+expect("mask clamps vertically", icon.appliedMask.wrap[2], "CLAMPTOBLACKADDITIVE")
+expect("mask path skips the crop", icon.coord, nil)
+
+local plainMaskOk, plainMaskErr, plainMasked = applyChrome({
+  maskApi = true,
+  failPaths = {},
+  rejectWrap = true,
+})
+expect("rejected mask wrap does not raise", plainMaskOk, true)
+if not plainMaskOk then
+  io.stderr:write(tostring(plainMaskErr) .. "\n")
+end
+local plainIcon = regionByLayer(plainMasked, "ARTWORK")
+expect("plain mask path still masks", plainIcon.appliedMask ~= nil, true)
+expect("plain mask texture", plainIcon.appliedMask.path, Forever.MINIMAP_MASK)
+expect("plain mask has no wrap", plainIcon.appliedMask.wrap[1], nil)
+expect("plain mask skips the crop", plainIcon.coord, nil)
+
+Forever.placeMinimapIcon(icon, true)
+expect("pressed point", icon.anchor[1], "CENTER")
+expect("pressed nudge x", icon.anchor[2], 1)
+expect("pressed nudge y", icon.anchor[3], -1)
+Forever.placeMinimapIcon(icon, false)
+expect("released x", icon.anchor[2], 0)
+expect("released y", icon.anchor[3], 0)
+
+local cropOk, cropErr, cropped = applyChrome({ maskApi = false, failPaths = {} })
+expect("crop setup does not raise", cropOk, true)
+if not cropOk then
+  io.stderr:write(tostring(cropErr) .. "\n")
+end
+local croppedIcon = regionByLayer(cropped, "ARTWORK")
+expect("missing mask api crops", croppedIcon.coord[1], Forever.MINIMAP_ICON_CROP)
+expect("crop right edge", croppedIcon.coord[2], 1 - Forever.MINIMAP_ICON_CROP)
+expect("crop top edge", croppedIcon.coord[3], Forever.MINIMAP_ICON_CROP)
+expect("crop bottom edge", croppedIcon.coord[4], 1 - Forever.MINIMAP_ICON_CROP)
+expect("crop path has no mask", croppedIcon.appliedMask, nil)
+expect("crop frame is still 31", cropped.w, 31)
+expect("crop border is still 50", regionByLayer(cropped, "OVERLAY").w, 50)
+
+local brokenPaths = {
+  [Forever.MINIMAP_BORDER] = "error",
+  [Forever.MINIMAP_BACKGROUND] = "error",
+  [Forever.MINIMAP_ICON] = "error",
+  [Forever.MINIMAP_MASK] = "error",
+}
+local brokenOk, brokenErr, broken = applyChrome({
+  maskApi = true,
+  failPaths = brokenPaths,
+  highlightError = true,
+})
+expect("missing textures do not raise", brokenOk, true)
+if not brokenOk then
+  io.stderr:write(tostring(brokenErr) .. "\n")
+end
+expect("missing highlight is skipped", broken.highlightPath, nil)
+expect("missing border is hidden", regionByLayer(broken, "OVERLAY").hidden, true)
+expect("missing background is hidden", regionByLayer(broken, "BACKGROUND").hidden, true)
+expect("missing icon is hidden", regionByLayer(broken, "ARTWORK").hidden, true)
+expect("missing mask texture falls back to crop", regionByLayer(broken, "ARTWORK").coord[1], Forever.MINIMAP_ICON_CROP)
+
+local falsePaths = {
+  [Forever.MINIMAP_BORDER] = "false",
+  [Forever.MINIMAP_BACKGROUND] = "false",
+  [Forever.MINIMAP_ICON] = "false",
+  [Forever.MINIMAP_MASK] = "false",
+}
+local falseOk, falseErr, falseButton = applyChrome({ maskApi = true, failPaths = falsePaths })
+expect("a false texture does not raise", falseOk, true)
+if not falseOk then
+  io.stderr:write(tostring(falseErr) .. "\n")
+end
+expect("a false border is hidden", regionByLayer(falseButton, "OVERLAY").hidden, true)
+expect("a false background is hidden", regionByLayer(falseButton, "BACKGROUND").hidden, true)
+expect("a false icon is hidden", regionByLayer(falseButton, "ARTWORK").hidden, true)
+expect("a false mask texture falls back to crop", regionByLayer(falseButton, "ARTWORK").coord[1], Forever.MINIMAP_ICON_CROP)
+
+local blendOk, blendErr, blendButton = applyChrome({ maskApi = false, failPaths = {}, rejectBlend = true })
+expect("rejected ADD highlight does not raise", blendOk, true)
+if not blendOk then
+  io.stderr:write(tostring(blendErr) .. "\n")
+end
+expect("highlight still uses the zoom texture", blendButton.highlightPath, Forever.MINIMAP_HIGHLIGHT)
+expect("highlight blend is applied on the texture", blendButton.highlight.blend, "ADD")
+
+local chromeJournal = {
+  schemaVersion = 3,
+  sessions = {
+    {
+      characterKey = "Mira-Example Realm",
+      entries = {
+        { type = "death", msg = "Died.", seq = 1 },
+      },
+    },
+  },
+  settings = { minimapAngle = 225, afkNoteMinutes = 10 },
+}
+local chromeSessions = chromeJournal.sessions
+local chromeEntries = chromeJournal.sessions[1].entries
+Forever.applyMinimapButtonChrome(fakeButton({ maskApi = true, failPaths = {} }))
+expect("chrome leaves schema 3", chromeJournal.schemaVersion, 3)
+expect("chrome leaves the sessions table", chromeJournal.sessions, chromeSessions)
+expect("chrome leaves the entries table", chromeJournal.sessions[1].entries, chromeEntries)
+expect("chrome adds no entry", #chromeEntries, 1)
+expect("chrome leaves the death line", chromeEntries[1].msg, "Died.")
+expect("chrome leaves the saved angle", chromeJournal.settings.minimapAngle, 225)
+expect("chrome leaves the other setting", chromeJournal.settings.afkNoteMinutes, 10)
+expect("left click still toggles after chrome", Forever.minimapClickAction("LeftButton", 0, 0), "toggle")
+expect("drag still is not a click after chrome", Forever.minimapClickAction("LeftButton", 9, 0), "none")
+expect("right click still opens the menu after chrome", Forever.minimapClickAction("RightButton", 0, 0), "menu")
+Forever.storeMinimapAngle(chromeJournal, 10)
+expect("angle still stores after chrome", chromeJournal.settings.minimapAngle, 10)
+expect("schema stays 3 after that store", chromeJournal.schemaVersion, 3)
+expect("sessions stay the same object after that store", chromeJournal.sessions, chromeSessions)
 
 local notes = readFile("JournalingAddon/features/Notes.lua")
 local shots = readFile("JournalingAddon/features/Screenshots.lua")
