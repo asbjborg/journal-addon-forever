@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.37] - 2026-11-14
+
+### Changed
+
+- **Login note prompt** (Refs #12)
+  - Login writes the `Logged in.` system line and skips the "Logged in - Add Note" dialog, however long the break was
+  - Manual notes, the screenshot note dialog, and the AFK "Back - Add Note" prompt stay as they are
+  - `JournalDB.settings.loginNoteMinutes` is left in place. Schema stays 3
+
 ## [0.6.36] - 2026-11-10
 
 ### Changed

@@ -623,6 +623,260 @@ local initEnd = storage:find("function Journal:GetSetting", 1, true)
 local initDb = storage:sub(initStart, initEnd - 1)
 expect("load does not write the minimap angle", initDb:find("minimapAngle", 1, true) == nil, true)
 expect("load still avoids ResetDatabase", initDb:find("self:ResetDatabase", 1, true) == nil, true)
+expect("schema constant stays 3", storage:find("local CURRENT_SCHEMA = 3", 1, true) ~= nil, true)
+expect("login note minutes key stays", initDb:find("loginNoteMinutes", 1, true) ~= nil, true)
+expect("afk note minutes key stays", initDb:find("afkNoteMinutes", 1, true) ~= nil, true)
+
+local loginStart = storage:find('Journal.On("PLAYER_LOGIN"', 1, true)
+local loginEnd = storage:find('Journal.On("PLAYER_LOGOUT"', 1, true)
+local loginHandler = storage:sub(loginStart, loginEnd - 1)
+expect("login still writes Logged in", loginHandler:find('{ message = "Logged in." }', 1, true) ~= nil, true)
+expect("login handler does not prompt", loginHandler:find("MaybePromptAwayNote", 1, true) == nil, true)
+expect("login handler does not pass a login reason", loginHandler:find('"login"', 1, true) == nil, true)
+expect("logout still stamps lastLogoutAt", storage:find("JournalDB.lastLogoutAt = time()", 1, true) ~= nil, true)
+expect("logout still writes Logged out", storage:find('{ message = "Logged out." }', 1, true) ~= nil, true)
+
+local afk = readFile("JournalingAddon/features/Afk.lua")
+expect(
+  "afk return still prompts",
+  afk:find('Journal:MaybePromptAwayNote(event, "back", duration)', 1, true) ~= nil,
+  true
+)
+expect("manual note dialog remains", notes:find("function Journal:ShowNoteCaptureDialog()", 1, true) ~= nil, true)
+expect("away note function remains", notes:find("function Journal:MaybePromptAwayNote(event, reason, durationSeconds)", 1, true) ~= nil, true)
+expect("screenshot note dialog remains", shots:find("function Journal:ShowTargetCaptureDialog()", 1, true) ~= nil, true)
+
+local function runLoginNoteFixture()
+  local now = 1000000
+  local dialogs = {}
+  local env = {}
+  env._G = env
+  setmetatable(env, { __index = _G })
+
+  local widgetMethods = {}
+  function widgetMethods:SetSize() end
+  function widgetMethods:SetPoint() end
+  function widgetMethods:SetFrameStrata() end
+  function widgetMethods:EnableMouse() end
+  function widgetMethods:SetMovable() end
+  function widgetMethods:RegisterForDrag() end
+  function widgetMethods:SetScript(name, fn)
+    self.scripts[name] = fn
+  end
+  function widgetMethods:SetText(text)
+    self.text = text
+  end
+  function widgetMethods:GetText()
+    return self.text
+  end
+  function widgetMethods:SetJustifyH() end
+  function widgetMethods:SetFontObject() end
+  function widgetMethods:SetWidth() end
+  function widgetMethods:GetWidth()
+    return 400
+  end
+  function widgetMethods:SetAutoFocus() end
+  function widgetMethods:SetMultiLine() end
+  function widgetMethods:SetScrollChild() end
+  function widgetMethods:SetFocus() end
+  function widgetMethods:Hide()
+    self.shown = false
+  end
+  function widgetMethods:Raise() end
+  function widgetMethods:StartMoving() end
+  function widgetMethods:StopMovingOrSizing() end
+  function widgetMethods:CreateFontString()
+    return setmetatable({ scripts = {}, text = "" }, { __index = widgetMethods })
+  end
+  function widgetMethods:Show()
+    self.shown = true
+    local title = nil
+    local message = nil
+    if self.title then
+      title = self.title.text
+    end
+    if self.message then
+      message = self.message.text
+    end
+    dialogs[#dialogs + 1] = {
+      name = self.name,
+      title = title,
+      message = message,
+    }
+  end
+
+  local function widget(name)
+    return setmetatable({ scripts = {}, name = name, text = "", TitleBg = {} }, { __index = widgetMethods })
+  end
+
+  env.CreateFrame = function(_, name)
+    return widget(name)
+  end
+  env.UIParent = widget("UIParent")
+  env.time = function()
+    return now
+  end
+  env.date = function(fmt)
+    if fmt == "%Y-%m-%d" then
+      return "2026-11-14"
+    end
+    if fmt == "%Y-%m-%dT%H:%M:%S" then
+      return "2026-11-14T09:00:00"
+    end
+    if fmt == "!%Y%m%dT%H%M%SZ" then
+      return "20261114T090000Z"
+    end
+    if fmt == "*t" then
+      return { year = 2026, month = 11, day = 14, hour = 9, min = 5, sec = 6 }
+    end
+    error("unexpected date format " .. tostring(fmt))
+  end
+  env.GetRealZoneText = function()
+    return "Elwynn Forest"
+  end
+  env.GetSubZoneText = function()
+    return ""
+  end
+  env.UnitAffectingCombat = function()
+    return false
+  end
+  env.UnitName = function()
+    return "Mira", nil
+  end
+  env.GetRealmName = function()
+    return "Example Realm"
+  end
+  env.UnitXP = function()
+    return 40
+  end
+  env.UnitXPMax = function()
+    return 100
+  end
+  env.UnitExists = function()
+    return false
+  end
+
+  local function loadAddon(path, journal)
+    local chunk, err = loadfile(path, "t", env)
+    if not chunk then
+      error(err)
+    end
+    return chunk("JournalingAddon", journal)
+  end
+
+  local journal = {}
+  loadAddon("JournalingAddon/core/Namespace.lua", journal)
+  loadAddon("JournalingAddon/core/Forever.lua", journal)
+  loadAddon("JournalingAddon/core/Util.lua", journal)
+  loadAddon("JournalingAddon/core/Renderers.lua", journal)
+  loadAddon("JournalingAddon/core/Storage.lua", journal)
+  loadAddon("JournalingAddon/features/Afk.lua", journal)
+  loadAddon("JournalingAddon/features/Notes.lua", journal)
+  loadAddon("JournalingAddon/features/Screenshots.lua", journal)
+
+  local savedNote = { type = "note", msg = "Note: hello", seq = 1, data = { text = "hello" } }
+  local saved = {
+    schemaVersion = 3,
+    lastLogoutAt = now - (85 * 60),
+    sessions = {
+      {
+        characterKey = "Mira-Example Realm",
+        dayKey = "2026-11-14",
+        entries = { savedNote },
+      },
+    },
+    settings = { afkNoteMinutes = 10, loginNoteMinutes = 30 },
+  }
+  local sessionsBefore = saved.sessions
+  local entriesBefore = saved.sessions[1].entries
+  local settingsBefore = saved.settings
+  env.JournalDB = saved
+
+  journal.Emit("PLAYER_LOGIN")
+
+  expect("login reuses the saved session", journal.currentSession, saved.sessions[1])
+  expect("login keeps the entries table", journal.currentSession.entries, entriesBefore)
+  expect("login keeps the original note", entriesBefore[1], savedNote)
+  expect("login keeps the note text", entriesBefore[1].msg, "Note: hello")
+  expect("login appends one line", #entriesBefore, 2)
+  expect("login line type", entriesBefore[2].type, "system")
+  expect("login line message", entriesBefore[2].data.message, "Logged in.")
+  expect("login line text", entriesBefore[2].msg, "Logged in.")
+  expect("login line schema", entriesBefore[2].v, 3)
+  expect("login leaves schema 3", saved.schemaVersion, 3)
+  expect("login leaves the sessions table", saved.sessions, sessionsBefore)
+  expect("login leaves the settings table", saved.settings, settingsBefore)
+  expect("login leaves loginNoteMinutes", saved.settings.loginNoteMinutes, 30)
+  expect("login leaves afkNoteMinutes", saved.settings.afkNoteMinutes, 10)
+  expect("login adds no prompt setting", saved.settings.loginNotePrompt, nil)
+  expect("login leaves the logout stamp", saved.lastLogoutAt, 1000000 - (85 * 60))
+  expect("login samples xp", journal.agg.xp.lastXP, 40)
+  expect("login samples max xp", journal.agg.xp.lastMaxXP, 100)
+  expect("long break opens no dialog", #dialogs, 0)
+
+  journal.Emit("CHAT_MSG_SYSTEM", "You are now AFK.")
+  now = now + 60
+  journal.Emit("CHAT_MSG_SYSTEM", "You are no longer AFK.")
+  expect("one-minute afk opens no dialog", #dialogs, 0)
+  expect("one-minute afk still logs Back", entriesBefore[#entriesBefore].msg, "Back.")
+
+  journal.Emit("CHAT_MSG_SYSTEM", "You are now AFK.")
+  now = now + (11 * 60)
+  journal.Emit("CHAT_MSG_SYSTEM", "You are no longer AFK.")
+  expect("eleven-minute afk opens one dialog", #dialogs, 1)
+  expect("eleven-minute afk title", dialogs[1].title, "Back - Add Note")
+  expect("eleven-minute afk message", dialogs[1].message, "Write a note about your break? (11m)")
+  expect("eleven-minute afk frame", dialogs[1].name, "JournalNotePromptFrame")
+
+  journal:ShowNoteCaptureDialog()
+  expect("manual note dialog opens", dialogs[#dialogs].title, "Add Note")
+  expect("manual note dialog frame", dialogs[#dialogs].name, "JournalNoteCaptureFrame")
+
+  journal:ShowTargetCaptureDialog()
+  expect("screenshot note dialog opens", dialogs[#dialogs].title, "Capture - Add Note")
+  expect("screenshot note dialog frame", dialogs[#dialogs].name, "JournalTargetCaptureFrame")
+
+  local loggedIn = 0
+  for _, entry in ipairs(entriesBefore) do
+    if entry.msg == "Logged in." then
+      loggedIn = loggedIn + 1
+    end
+  end
+  local dialogsBeforeReload = #dialogs
+  journal.reloadPending = true
+  journal.db.reloadPending = true
+  journal.Emit("PLAYER_LOGIN")
+  local loggedInAfter = 0
+  for _, entry in ipairs(entriesBefore) do
+    if entry.msg == "Logged in." then
+      loggedInAfter = loggedInAfter + 1
+    end
+  end
+  expect("reload adds no dialog", #dialogs, dialogsBeforeReload)
+  expect("reload does not write another login", loggedInAfter, loggedIn)
+  expect("reload leaves schema 3", saved.schemaVersion, 3)
+
+  local sawLoginPrompt = false
+  for _, dialog in ipairs(dialogs) do
+    if dialog.title == "Logged in - Add Note" then
+      sawLoginPrompt = true
+    end
+  end
+  expect("login prompt title never appears", sawLoginPrompt, false)
+
+  now = now + 5
+  journal.Emit("PLAYER_LOGOUT")
+  expect("logout writes Logged out", entriesBefore[#entriesBefore].msg, "Logged out.")
+  expect("logout updates the stamp", saved.lastLogoutAt, now)
+  expect("logout leaves schema 3", saved.schemaVersion, 3)
+  expect("logout leaves loginNoteMinutes", saved.settings.loginNoteMinutes, 30)
+end
+
+local loginOk, loginErr = xpcall(runLoginNoteFixture, debug.traceback)
+if not loginOk then
+  failures = failures + 1
+  io.stderr:write(loginErr .. "\n")
+end
 
 if failures > 0 then
   io.stderr:write(failures .. " failure(s)\n")
